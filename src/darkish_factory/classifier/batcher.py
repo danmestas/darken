@@ -31,9 +31,7 @@ class Batcher:
     ) -> list[RequestHumanInput] | None:
         if request.urgency == "high":
             payload = audit_ctx.envelope()
-            payload.update(
-                {"reason": "urgency_high", "size": 1, "tokens": [request.resume_token]}
-            )
+            payload.update({"reason": "urgency_high", "size": 1, "tokens": [request.resume_token]})
             self.audit_log.emit("batch_flush", payload)
             return [request]
 

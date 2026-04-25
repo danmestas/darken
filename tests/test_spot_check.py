@@ -15,9 +15,7 @@ CTX = AuditContext(decision_id="d?", constitution_hash="0" * 64, policy_hash="1"
 
 
 def _ctx(decision_id: str) -> AuditContext:
-    return AuditContext(
-        decision_id=decision_id, constitution_hash="0" * 64, policy_hash="1" * 64
-    )
+    return AuditContext(decision_id=decision_id, constitution_hash="0" * 64, policy_hash="1" * 64)
 
 
 class _CaptureLog:
@@ -33,9 +31,7 @@ def test_sample_rate_respected_within_tolerance() -> None:
     rng = random.Random(0xC0FFEE)
     checker = SpotChecker(rate=0.05, audit_log=log, rng=rng, drift_threshold=999)
     samples = sum(
-        1
-        for i in range(10000)
-        if checker.maybe_sample(category="taste", audit_ctx=_ctx(f"d{i}"))
+        1 for i in range(10000) if checker.maybe_sample(category="taste", audit_ctx=_ctx(f"d{i}"))
     )
     # Expect ~500; tolerate +/- 100
     assert 400 <= samples <= 600

@@ -13,9 +13,7 @@ CTX = AuditContext(decision_id="d?", constitution_hash="0" * 64, policy_hash="1"
 
 
 def _ctx(decision_id: str) -> AuditContext:
-    return AuditContext(
-        decision_id=decision_id, constitution_hash="0" * 64, policy_hash="1" * 64
-    )
+    return AuditContext(decision_id=decision_id, constitution_hash="0" * 64, policy_hash="1" * 64)
 
 
 class _CaptureLog:

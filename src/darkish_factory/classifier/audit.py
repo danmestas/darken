@@ -46,8 +46,7 @@ class AuditContext:
 class AuditLog(Protocol):
     """Single-method writer surface."""
 
-    def emit(self, event_type: str, payload: dict[str, Any]) -> None:
-        ...
+    def emit(self, event_type: str, payload: dict[str, Any]) -> None: ...
 
 
 class NullAuditLog:

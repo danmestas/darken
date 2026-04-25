@@ -136,9 +136,7 @@ def match_git_push_protected_branch(
     return None
 
 
-def match_spend_above(
-    pd: ProposedDecision, policy: Policy, spend_total: float
-) -> Match | None:
+def match_spend_above(pd: ProposedDecision, policy: Policy, spend_total: float) -> Match | None:
     if "spend_above" not in policy.escalate_on.reversibility.triggers:
         return None
     floor = policy.escalate_on.reversibility.spend_above_usd

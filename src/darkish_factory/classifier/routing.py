@@ -34,14 +34,12 @@ Definitions:
 
 
 class _MessagesAPI(Protocol):
-    def create(self, **kwargs: Any) -> Any:
-        ...
+    def create(self, **kwargs: Any) -> Any: ...
 
 
 class _AnthropicLike(Protocol):
     @property
-    def messages(self) -> _MessagesAPI:
-        ...
+    def messages(self) -> _MessagesAPI: ...
 
 
 @dataclass
