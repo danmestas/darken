@@ -1,12 +1,29 @@
-"""Darkish Factory — Slice 1 public API."""
+"""Darkish Factory public API for Slice 1."""
 
 from __future__ import annotations
 
+from .classifier.answers import HumanAnswer, RequestHumanInput
+from .classifier.api import Classifier
+from .classifier.audit import AuditLog, JSONLAuditLog, NullAuditLog
+from .classifier.errors import (
+    ClassifierOutageError,
+    ConstitutionConflictError,
+    EscalationRequired,
+    PolicyDriftError,
+)
+
 __version__ = "0.1.0"
 
-
-class Classifier:  # placeholder; real implementation arrives in Task 13
-    """Bootstrap stub. Replaced by the full implementation in Task 13."""
-
-
-__all__ = ["Classifier", "__version__"]
+__all__ = [
+    "AuditLog",
+    "Classifier",
+    "ClassifierOutageError",
+    "ConstitutionConflictError",
+    "EscalationRequired",
+    "HumanAnswer",
+    "JSONLAuditLog",
+    "NullAuditLog",
+    "PolicyDriftError",
+    "RequestHumanInput",
+    "__version__",
+]
