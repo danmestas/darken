@@ -96,3 +96,13 @@ def test_human_answer_choose_with_choice() -> None:
         interpretation="option_b",
     )
     assert ans.choice == "option_b"
+
+
+def test_human_answer_rejects_extra_field() -> None:
+    with pytest.raises(ValidationError):
+        HumanAnswer(  # type: ignore[call-arg]
+            kind="ratify",
+            raw_text="ok",
+            interpretation="ratify",
+            extra_unknown_key="boom",
+        )

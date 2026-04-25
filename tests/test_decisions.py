@@ -72,3 +72,15 @@ def test_stage2_verdict_confidence_bounds() -> None:
             reasoning="impossible",
             produced_by="classifier",
         )
+
+
+def test_stage2_verdict_rejects_extra_field() -> None:
+    with pytest.raises(ValidationError):
+        Stage2Verdict(  # type: ignore[call-arg]
+            escalate=False,
+            categories=[],
+            confidence=0.5,
+            reasoning="ok",
+            produced_by="classifier",
+            extra_unknown_key="boom",
+        )
