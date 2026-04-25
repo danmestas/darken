@@ -181,8 +181,23 @@ class Classifier:
         )
 
     def resume(self, token: str, operator_answer: HumanAnswer) -> HumanAnswer:
-        # Implemented in Task 14.
-        raise NotImplementedError
+        if token not in self._pending:
+            raise KeyError(f"unknown resume token: {token!r}")
+        pending = self._pending.pop(token)
+        ctx = self._audit_ctx(pending.proposed_decision.decision_id)
+
+        self._override.capture(
+            verdict=pending.verdict,
+            answer=operator_answer,
+            audit_ctx=ctx,
+            recommendation=pending.request.recommendation,
+        )
+
+        if operator_answer.kind == "ratify":
+            for cat in pending.verdict.categories or ["taste"]:
+                self._spot.maybe_sample(category=cat, audit_ctx=ctx)
+
+        return operator_answer
 
     # ----- internals -----
 
