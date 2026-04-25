@@ -1,0 +1,22 @@
+escalate_on:
+  taste:
+    triggers: [public_api_naming, user_visible_copy, new_abstraction_naming]
+  architecture:
+    triggers: [new_top_level_module, new_service_boundary,
+               data_model_change_affecting_other_code, new_external_dependency,
+               consistency_model_choice, sync_async_boundary_choice]
+  ethics:
+    triggers: [pii_collection_or_logging, auth_change, new_egress_path,
+               dark_pattern_risk, dual_use_risk,
+               regulated_domain: [health, finance, minors, identity]]
+  reversibility:
+    triggers: [schema_migration_on_populated_table, data_deletion,
+               public_release, external_communication,
+               destructive_fs_op_outside_worktree, git_push_protected_branch,
+               spend_above: 50_usd]
+thresholds:
+  confidence_floor: 0.7
+  batch_size: 5
+  max_queue_latency_min: 30
+  protected_branches: [main, master, release]
+spot_check_rate: 0.05
