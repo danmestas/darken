@@ -324,3 +324,35 @@ This document is itself a formal specification of the kind §11.1 describes. If 
 - [SmartOracle](https://arxiv.org/abs/2601.15074) — agent-coordinated differential testing
 - [AIProbe](https://arxiv.org/abs/2507.03870) — differential testing with oracle planners
 - [UnitTenX](https://arxiv.org/abs/2510.05441) — AI agents with formal verification for legacy test generation
+
+## Slice 1: Escalation classifier library (this implementation)
+
+> Requires `ANTHROPIC_API_KEY` environment variable.
+
+Slice 1 is a standalone, harness-agnostic Python library exposing a hybrid
+escalation classifier (deterministic Stage 1 + adversarial Stage 2 LLM)
+plus a routing classifier.
+
+### Public API
+
+```python
+import os
+from pathlib import Path
+import anthropic
+from darkish_factory import Classifier, JSONLAuditLog
+
+c = Classifier(
+    constitution_path=Path("constitution.md"),
+    policy_path=Path("policy.yaml"),
+    audit_log=JSONLAuditLog(Path("audit.jsonl")),
+    llm_client=anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
+)
+
+answer_or_request = c.decide(proposed_decision)
+# If answer_or_request is a HumanAnswer, the decision auto-ratified.
+# If it's a RequestHumanInput, escalate to the operator and call:
+final = c.resume(answer_or_request.resume_token, operator_answer)
+```
+
+See `docs/superpowers/specs/2026-04-25-escalation-classifier-design.md` for
+the full design.
