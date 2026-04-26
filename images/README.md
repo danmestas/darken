@@ -135,6 +135,70 @@ at start. In practice the scion-codex image runs codex with `permissions: YOLO m
 which already bypasses the prompt, so the prelude's trust block is
 defensive — it survives if scion-codex's CMD ever changes.
 
+## Pi
+
+`images/pi/` extends `scion-pi` for OpenRouter-backed agents using
+`@mariozechner/pi-coding-agent`.
+
+**Status:** scaffold + tool baseline. Pi auth is via `OPENROUTER_API_KEY`
+env var (scion injects from operator env or hub secrets). Trust
+mechanism for first-encounter dialogs is not yet verified — placeholder
+in the prelude. Validate on first pi smoke run and update.
+
+Build:
+
+```bash
+make -C images pi
+```
+
+Pi-using harness manifest:
+
+```yaml
+default_harness_config: pi
+image: local/darkish-pi:latest
+model: <openrouter-model-id>
+```
+
+No `volumes:` block needed — auth is env-var-based.
+
+## Gemini
+
+`images/gemini/` extends `scion-gemini`.
+
+**Status:** scaffold + tool baseline. Gemini supports three auth
+paths:
+
+| Path | Mechanism | Cost |
+|---|---|---|
+| API key | `GEMINI_API_KEY` env var | Free tier on AI Studio; paid above |
+| OAuth | `~/.gemini/oauth_creds.json` (scion auto-detects on broker host) | Per gemini-cli plan |
+| Vertex AI | `GOOGLE_APPLICATION_CREDENTIALS` service account | GCP billing |
+
+Trust mechanism not yet verified — placeholder in the prelude.
+
+Build:
+
+```bash
+make -C images gemini
+```
+
+Gemini-using harness manifest:
+
+```yaml
+default_harness_config: gemini
+image: local/darkish-gemini:latest
+model: gemini-3.1-pro-preview
+```
+
+For OAuth, mount the auth file directly (same pattern as codex):
+
+```yaml
+volumes:
+  - source: ~/.gemini/oauth_creds.json
+    target: /home/scion/.gemini/oauth_creds.json
+    read_only: true
+```
+
 ## Spawning agents
 
 Use `scripts/spawn.sh` instead of bare `scion start`. It refreshes the
@@ -144,3 +208,6 @@ harness:
 ```bash
 scripts/spawn.sh smoke-test --type researcher --workspace /tmp/wt "task..."
 ```
+
+For codex agents, use `scion --no-hub start <agent>` (the hub-mediated
+start does not auto-detect `~/.codex/auth.json` from the broker host).

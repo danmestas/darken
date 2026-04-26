@@ -2,13 +2,13 @@ schema_version: "1"
 description: "Subject-matter expert - summoned for one focused software-engineering question; rejects poorly-formed questions"
 agent_instructions: agents.md
 system_prompt: system-prompt.md
-default_harness_config: claude
-image: local/darkish-claude:latest
-model: claude-opus-4-7
+default_harness_config: codex
+image: local/darkish-codex:latest
+model: gpt-5.5
 max_turns: 10
 max_duration: "15m"
 detached: false
 volumes:
-  - source: ~/.scion-credentials/claude/.credentials.json
-    target: /home/scion/.claude/.credentials.json
+  - source: ~/.codex/auth.json
+    target: /home/scion/.codex/auth.json
     read_only: true
