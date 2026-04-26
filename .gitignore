@@ -1,10 +1,14 @@
 # Scion runtime state — never commit
 .scion/runtime/
 .scion/cache/
+.scion/agents/
 
 # Container and grove state
 .scion/grove-state/
 .scion/worktrees/
+.scion/state.yaml
+.scion/server.log
+.scion/server.pid
 
 # macOS
 .DS_Store
