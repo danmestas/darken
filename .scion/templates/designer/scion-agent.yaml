@@ -1,0 +1,9 @@
+schema_version: "1"
+description: "Designer - converts intent + research into a spec with structural decisions and tradeoffs (collapses spec-writer + architect from README §5.1)"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
+model: claude-opus-4-7
+max_turns: 50
+max_duration: "1h"
+detached: false
