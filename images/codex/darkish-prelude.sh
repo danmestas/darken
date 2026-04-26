@@ -2,35 +2,37 @@
 # darkish-prelude.sh (codex variant) — runs before sciontool init in
 # the darkish-codex container.
 #
-# Codex is simpler than Claude: scion natively auto-detects
-# ~/.codex/auth.json on the host and mounts it into the container at
-# the standard location, so there is no OAuth shim required here.
-# This prelude only handles trust-state injection (and any future
-# codex-specific setup).
+# Codex auth is handled by scion natively: pkg/harness/codex.go reads
+# ~/.codex/auth.json from the host and mounts it into the container at
+# /home/scion/.codex/auth.json. No OAuth shim is required.
 #
-# TODO: Codex CLI's first-encounter trust mechanism is not yet
-# verified by us. The placeholder below pre-creates ~/.codex with
-# a minimal config in case codex reads from there. Validate against
-# real codex behavior on first use; update as needed.
+# This prelude only handles trust-state injection. Codex CLI tracks
+# per-project trust in ~/.codex/config.toml as:
+#
+#     [projects."<absolute-path>"]
+#     trust_level = "trusted"
+#
+# If the workspace path lacks such a block, codex will prompt on first
+# encounter — blocking the harness on a TUI dialog. We append the block
+# at start-up so the prompt never fires.
 
 set -euo pipefail
 
 # --- 1. Trust the workspace --------------------------------------------------
 
 WORKSPACE_PATH="/repo-root/.scion/agents/${SCION_AGENT_NAME:-unknown}/workspace"
+CONFIG="${HOME}/.codex/config.toml"
 
 mkdir -p "${HOME}/.codex"
 
-# Placeholder trust mechanism. Codex CLI's actual config schema needs
-# verification — this is a starting point modeled on Claude's pattern.
-# When we first run a codex harness end-to-end, observe what dialog it
-# shows and update this section.
-if [[ ! -f "${HOME}/.codex/trusted.json" ]]; then
-  cat > "${HOME}/.codex/trusted.json" <<JSON
-{
-  "trusted_directories": ["${WORKSPACE_PATH}"]
-}
-JSON
+if [[ -f "${CONFIG}" ]] && grep -qE "^\[projects\.\"${WORKSPACE_PATH//\//\\/}\"\]" "${CONFIG}"; then
+  : # Trust block already present.
+else
+  {
+    echo ""
+    echo "[projects.\"${WORKSPACE_PATH}\"]"
+    echo "trust_level = \"trusted\""
+  } >> "${CONFIG}"
 fi
 
 # --- 2. Hand off to scion ----------------------------------------------------

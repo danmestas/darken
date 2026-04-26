@@ -80,28 +80,60 @@ The host-side credential file is staged from the macOS Keychain by
 
 ## Codex
 
-`images/codex/` scaffolds a `darkish-codex` image extending `scion-codex`.
-Same shape as `darkish-claude` minus the OAuth shim — scion auto-detects
-`~/.codex/auth.json` and supports `auth-file` mode natively.
+`images/codex/` produces a `darkish-codex` image extending `scion-codex`.
 
-**Status:** scaffold only. Not yet validated end-to-end. The codex
-prelude's trust mechanism is a placeholder modeled on Claude's
-pattern. Validate when first running a codex harness and update.
+**Status:** validated end-to-end on 2026-04-26. Smoke-tested against the
+Codex Max plan: container starts, `~/.codex/auth.json` mounts in,
+codex CLI v0.125.0 launches with `gpt-5.4 medium · YOLO mode`, accepts
+the task prompt, returns the answer.
 
-To build:
+Build:
 
 ```bash
-# Requires local/scion-codex:latest already built (currently only
-# scion-claude has been built; build the rest via scion's build-images.sh
-# or direct docker build against image-build/codex/Dockerfile).
 make -C images codex
 ```
 
-When a Darkish Factory harness wants to call codex (e.g., `sme` for
-GPT-class reasoning), set `default_harness_config: codex` and
-`image: local/darkish-codex:latest` in its `scion-agent.yaml`. The
-volumes block is unnecessary; scion handles `~/.codex/auth.json`
-natively.
+**Mount the OAuth file directly.** Codex stores OAuth at
+`~/.codex/auth.json`. Mount it into the container — no staging step
+needed (unlike Claude, whose creds live in the macOS Keychain). Each
+codex-using harness's `scion-agent.yaml` sets:
+
+```yaml
+default_harness_config: codex
+image: local/darkish-codex:latest
+volumes:
+  - source: ~/.codex/auth.json
+    target: /home/scion/.codex/auth.json
+    read_only: true
+```
+
+**Use `scion --no-hub start` for codex agents (or push auth as a hub
+secret).** Scion's hub-mediated start does not auto-detect
+`~/.codex/auth.json` from the broker host — it expects the file to be
+pushed as a hub secret. Two paths:
+
+1. Local-only mode (simplest for solo dev):
+   ```bash
+   scion --no-hub start <agent-name>
+   ```
+   Scion auto-detects the file from `${HOME}/.codex/auth.json` on the
+   broker host and treats it as the codex auth source. Verified working.
+
+2. Hub-mode with explicit secret push:
+   ```bash
+   scion hub secret set --type file --target ~/.codex/auth.json --source ~/.codex/auth.json
+   ```
+   Then `scion start <agent-name> --harness-auth auth-file` works in
+   hub mode.
+
+The local-only path is what `scripts/spawn.sh` uses by default for codex.
+
+**Trust state.** Codex tracks per-project trust in `~/.codex/config.toml`
+as `[projects."<absolute-path>"] trust_level = "trusted"`. The codex
+prelude appends this for `/repo-root/.scion/agents/${SCION_AGENT_NAME}/workspace`
+at start. In practice the scion-codex image runs codex with `permissions: YOLO mode`
+which already bypasses the prompt, so the prelude's trust block is
+defensive — it survives if scion-codex's CMD ever changes.
 
 ## Spawning agents
 
