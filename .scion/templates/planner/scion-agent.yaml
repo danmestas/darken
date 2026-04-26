@@ -1,0 +1,9 @@
+schema_version: "1"
+description: "Planner - decomposes the spec into a stacked sequence of units of work with file paths and test strategy"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
+model: claude-opus-4-7
+max_turns: 30
+max_duration: "30m"
+detached: false

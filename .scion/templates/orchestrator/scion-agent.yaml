@@ -1,0 +1,9 @@
+schema_version: "1"
+description: "Darkish Factory orchestrator - runs the §7 loop, dispatches sub-harnesses, batches escalations to the operator"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
+model: claude-opus-4-7
+max_turns: 200
+max_duration: "4h"
+detached: false
