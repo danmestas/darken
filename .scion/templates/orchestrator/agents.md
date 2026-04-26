@@ -74,7 +74,7 @@ Two sub-harnesses in sequence: designer, then planner.
 **Designer:**
 
 ```bash
-scion start designer --type designer --notify "Convert the following intent (and research brief if provided) into a spec. Emit spec to your worktree at docs/spec.md. Validate against constitution.md. Flag any decision that conflicts with the constitution as an escalation. Intent: <intent summary>. Research brief: <path or summary>."
+scion start designer --type designer --notify "Convert the following intent (and research brief if provided) into a spec. Emit spec to your worktree at docs/spec.md. Validate against the constitution at .specify/memory/constitution.md. Flag any decision that conflicts with the constitution as an escalation. Intent: <intent summary>. Research brief: <path or summary>."
 ```
 
 Monitor. Cherry-pick the spec. Stop and delete the designer.

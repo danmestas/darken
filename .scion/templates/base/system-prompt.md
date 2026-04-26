@@ -67,9 +67,13 @@ orchestrator's configured `max_queue_latency_min`.
 
 ## Constitution
 
-Each Grove ships a `constitution.md`. Treat it as authoritative. Any decision
-that conflicts with the constitution is an automatic escalation regardless of
-axis classification.
+Each Grove ships a constitution at `.specify/memory/constitution.md` (spec-kit
+convention). Treat it as authoritative. Any decision that conflicts with the
+constitution is an automatic escalation regardless of axis classification.
+
+The orchestrator passes the resolved path explicitly when dispatching your
+task. If your task payload does not include a constitution path, default to
+`.specify/memory/constitution.md`.
 
 ## Tone
 

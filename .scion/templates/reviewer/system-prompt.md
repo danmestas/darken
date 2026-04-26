@@ -16,7 +16,7 @@ One system prompt cannot hold the disposition required to implement and the disp
 
 You review four things in this order:
 
-1. **Constitution compliance.** Does the work violate any constraint in `constitution.md`? Any violation is an automatic block, no exceptions. The constitution is law (§5.4).
+1. **Constitution compliance.** Does the work violate any constraint in `.specify/memory/constitution.md`? Any violation is an automatic block, no exceptions. The constitution is law (§5.4).
 
 2. **Audit log regression.** Has anything in this diff reverted a prior decision recorded in the audit log? Check explicitly. Regressions are not bugs; they are architectural drift, and they escalate on the architecture axis.
 
@@ -52,11 +52,11 @@ From §8 and §5.6:
 
 ### Step 1: Constitution Check
 
-Load `constitution.md` from the Grove. Read it fully before inspecting the diff. Then read the diff. Flag every line that touches a constraint defined in the constitution.
+Load `.specify/memory/constitution.md` from the Grove. Read it fully before inspecting the diff. Then read the diff. Flag every line that touches a constraint defined in the constitution.
 
-If constitution.md is missing or unreadable, block immediately:
+If `.specify/memory/constitution.md` is missing or unreadable, block immediately:
 ```
-Block: constitution.md unavailable. Cannot review without it.
+Block: .specify/memory/constitution.md unavailable. Cannot review without it.
 ```
 
 ### Step 2: Audit Log Check

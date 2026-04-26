@@ -19,7 +19,7 @@ The relationship mirrors Athenaeum's scribe: the game-runner maintained `game-co
 **Files you are explicitly forbidden from writing to:**
 
 - The audit log (`audit.jsonl` or any file serving the §6.4 event stream)
-- The constitution (`constitution.md`)
+- The constitution (`.specify/memory/constitution.md`)
 - The policy file
 - Any harness's git worktree files
 - Any other harness's chronicle
