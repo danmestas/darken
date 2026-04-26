@@ -39,13 +39,39 @@ codex:
 push-codex:
 	docker push $(REGISTRY)/darkish-codex:$(TAG)
 
+.PHONY: pi
+pi:
+	docker build \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-pi:$(TAG) \
+		-t $(REGISTRY)/darkish-pi:$(TAG) \
+		-f pi/Dockerfile \
+		pi
+
+.PHONY: push-pi
+push-pi:
+	docker push $(REGISTRY)/darkish-pi:$(TAG)
+
+.PHONY: gemini
+gemini:
+	docker build \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-gemini:$(TAG) \
+		-t $(REGISTRY)/darkish-gemini:$(TAG) \
+		-f gemini/Dockerfile \
+		gemini
+
+.PHONY: push-gemini
+push-gemini:
+	docker push $(REGISTRY)/darkish-gemini:$(TAG)
+
 .PHONY: all
-all: claude codex
+all: claude codex pi gemini
 
 .PHONY: push-all
-push-all: push-claude push-codex
+push-all: push-claude push-codex push-pi push-gemini
 
 .PHONY: clean
 clean:
 	docker rmi $(REGISTRY)/darkish-claude:$(TAG) || true
 	docker rmi $(REGISTRY)/darkish-codex:$(TAG) || true
+	docker rmi $(REGISTRY)/darkish-pi:$(TAG) || true
+	docker rmi $(REGISTRY)/darkish-gemini:$(TAG) || true
