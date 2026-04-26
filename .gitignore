@@ -1,0 +1,16 @@
+# Scion runtime state — never commit
+.scion/runtime/
+.scion/cache/
+
+# Container and grove state
+.scion/grove-state/
+.scion/worktrees/
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+.idea/
+.vscode/
