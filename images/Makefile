@@ -27,9 +27,25 @@ claude:
 push-claude:
 	docker push $(REGISTRY)/darkish-claude:$(TAG)
 
+.PHONY: codex
+codex:
+	docker build \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-codex:$(TAG) \
+		-t $(REGISTRY)/darkish-codex:$(TAG) \
+		-f codex/Dockerfile \
+		codex
+
+.PHONY: push-codex
+push-codex:
+	docker push $(REGISTRY)/darkish-codex:$(TAG)
+
 .PHONY: all
-all: claude
+all: claude codex
+
+.PHONY: push-all
+push-all: push-claude push-codex
 
 .PHONY: clean
 clean:
 	docker rmi $(REGISTRY)/darkish-claude:$(TAG) || true
+	docker rmi $(REGISTRY)/darkish-codex:$(TAG) || true

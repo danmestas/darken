@@ -78,11 +78,37 @@ env:
 The host-side credential file is staged from the macOS Keychain by
 `scripts/stage-creds.sh` — see that script for details.
 
-## Codex (future)
+## Codex
 
-When we add codex-using harnesses (`sme` could plausibly call codex for
-GPT-5.4-class reasoning), add `images/codex/Dockerfile` extending
-`scion-codex`. Codex auth is simpler — scion already auto-detects
-`~/.codex/auth.json` and supports `auth-file` mode natively, so the
-codex prelude will only need the trust state injection (and any custom
-tools), not the OAuth shim.
+`images/codex/` scaffolds a `darkish-codex` image extending `scion-codex`.
+Same shape as `darkish-claude` minus the OAuth shim — scion auto-detects
+`~/.codex/auth.json` and supports `auth-file` mode natively.
+
+**Status:** scaffold only. Not yet validated end-to-end. The codex
+prelude's trust mechanism is a placeholder modeled on Claude's
+pattern. Validate when first running a codex harness and update.
+
+To build:
+
+```bash
+# Requires local/scion-codex:latest already built (currently only
+# scion-claude has been built; build the rest via scion's build-images.sh
+# or direct docker build against image-build/codex/Dockerfile).
+make -C images codex
+```
+
+When a Darkish Factory harness wants to call codex (e.g., `sme` for
+GPT-class reasoning), set `default_harness_config: codex` and
+`image: local/darkish-codex:latest` in its `scion-agent.yaml`. The
+volumes block is unnecessary; scion handles `~/.codex/auth.json`
+natively.
+
+## Spawning agents
+
+Use `scripts/spawn.sh` instead of bare `scion start`. It refreshes the
+staged OAuth files from the macOS Keychain first, then starts the
+harness:
+
+```bash
+scripts/spawn.sh smoke-test --type researcher --workspace /tmp/wt "task..."
+```
