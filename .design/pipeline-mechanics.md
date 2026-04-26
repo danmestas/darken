@@ -191,11 +191,11 @@ class RequestHumanInput:
 
 ## 5. Audit Log Discipline
 
-The orchestrator owns the audit log. The scribe does not touch it.
+The orchestrator owns the audit log. The admin harness does not touch it.
 
 Every audit log event records: `decision_id`, `timestamp`, `constitution_hash`, `policy_hash`, plus the decision content, confidence, category, and auto-ratified/escalated status (README §6.4). The `constitution_hash` and `policy_hash` fields make the log reproducible: any historical decision can be replayed against the same policy state that produced it (README §9).
 
-The audit log is append-only. The orchestrator writes to it; no sub-harness writes to it directly. The scribe writes a separate narrative chronicle of pipeline activity to its own worktree, distinct from the audit log. Conflating the two would corrupt the log's integrity as a replay source.
+The audit log is append-only. The orchestrator writes to it; no sub-harness writes to it directly. The admin harness writes a separate narrative chronicle of pipeline activity to its own worktree, distinct from the audit log. Conflating the two would corrupt the log's integrity as a replay source.
 
 Post-pipeline, 5% of auto-ratified decisions are spot-checked against operator judgment. Systematic errors in a category reset that category's thresholds to defaults (README §6.2). This is the primary feedback mechanism for classifier calibration.
 

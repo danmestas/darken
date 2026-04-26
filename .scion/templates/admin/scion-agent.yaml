@@ -1,5 +1,5 @@
 schema_version: "1"
-description: "Scribe - append-only narrative chronicle of pipeline activity; observer-only, detached"
+description: "Admin - append-only narrative chronicle of pipeline activity; observer-only, detached"
 agent_instructions: agents.md
 system_prompt: system-prompt.md
 default_harness_config: claude
