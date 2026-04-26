@@ -1,0 +1,9 @@
+schema_version: "1"
+description: "Subject-matter expert - summoned for one focused software-engineering question; rejects poorly-formed questions"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
+model: claude-opus-4-7
+max_turns: 10
+max_duration: "15m"
+detached: false
