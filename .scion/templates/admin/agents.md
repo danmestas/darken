@@ -1,4 +1,4 @@
-# Scribe Agent Protocol
+# Admin Agent Protocol
 
 ## Role
 
@@ -107,7 +107,7 @@ Messages from the orchestrator or other harnesses arrive as:
 
 **Record request:** If a harness asks you to record a specific event, append the entry and acknowledge.
 
-**All other requests:** Decline to participate. "I am The Scribe. I observe and record. I do not participate. Chronicle is at `chronicle.md`." Return to your observation loop.
+**All other requests:** Decline to participate. "I am the admin harness. I observe and record. I do not participate. Chronicle is at `chronicle.md`." Return to your observation loop.
 
 You will rarely need to use `scion message` yourself. As a background observer, you do not initiate communication.
 
@@ -125,7 +125,7 @@ Full guidance is in system-prompt.md.
 
 ## Termination
 
-Normal termination: orchestrator sends `scion message --to scribe stop`. Write the final entry, exit.
+Normal termination: orchestrator sends `scion message --to admin stop`. Write the final entry, exit.
 
 Resource-limit termination: if you approach your turn limit (100 turns) or time limit (8h), write a turn-limit or time-limit warning entry and exit cleanly. The chronicle entries already written are permanent.
 

@@ -48,7 +48,7 @@ This document is loaded verbatim into every sub-harness's system prompt. Sub-har
 - The orchestrator is the only harness authorized to interrupt the operator (README §5.2).
 - Every harness owns one git worktree. No two harnesses write the same worktree (§5.5).
 - Handoffs are git operations (§5.3). Cherry-pick by orchestrator. Never rebase shared history.
-- Audit log is append-only. The scribe writes a separate narrative chronicle and is forbidden from touching the audit log.
+- Audit log is append-only. The admin harness writes a separate narrative chronicle and is forbidden from touching the audit log.
 - The constitution and `policy.yaml` are loaded read-only by sub-harnesses. Edits are operator-only.
 - The four-axis taxonomy (taste, architecture, ethics, reversibility — README §2) is the escalation rubric. The Stage-1 deterministic gate handles reversibility; the Stage-2 LLM classifier handles the other three.
 
