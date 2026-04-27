@@ -1,0 +1,77 @@
+# .goreleaser.yaml — darkish-factory release config.
+# See https://goreleaser.com/customization/ for the full schema.
+# Tag a vX.Y.Z release on main; .github/workflows/release.yaml fires
+# this from CI. Local snapshot: `goreleaser release --snapshot --clean`.
+version: 2
+
+project_name: darken
+
+before:
+  hooks:
+    # Sanity gates: embedded substrate must be in sync, all tests pass.
+    - bash scripts/test-embed-drift.sh
+    - go test ./...
+
+builds:
+  - id: darken
+    main: ./cmd/darken
+    binary: darken
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    flags:
+      - -trimpath
+
+archives:
+  - id: darken-archive
+    formats: [tar.gz]
+    name_template: "darken_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE*
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "Merge pull request"
+
+release:
+  github:
+    owner: danmestas
+    name: darkish-factory
+  draft: false
+  prerelease: auto
+  name_template: "darken {{ .Version }}"
+  header: |
+    See [docs/RELEASING.md](https://github.com/danmestas/darkish-factory/blob/main/docs/RELEASING.md) for upgrade notes.
+
+brews:
+  - name: darken
+    repository:
+      owner: danmestas
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/danmestas/darkish-factory"
+    description: "darken — Darkish Factory orchestration substrate CLI"
+    license: "MIT"
+    install: |
+      bin.install "darken"
+    test: |
+      system "#{bin}/darken", "version"
