@@ -11,6 +11,9 @@ detached: false
 skills:
   - danmestas/agent-skills/skills/ousterhout
   - danmestas/agent-skills/skills/hipp
+volumes:
+  - source: ./.scion/skills-staging/sme/
+    target: /home/scion/skills/role/
+    read_only: true
 # Codex auth comes from the user-scope hub secret 'codex_auth' (set via:
 # scion hub secret set --type file --target /home/scion/.codex/auth.json codex_auth @~/.codex/auth.json)
-# No 'volumes:' block here — would duplicate the secret's mount target.
