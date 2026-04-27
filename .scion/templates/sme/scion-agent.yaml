@@ -8,6 +8,9 @@ model: gpt-5.5
 max_turns: 10
 max_duration: "15m"
 detached: false
+skills:
+  - danmestas/agent-skills/skills/ousterhout
+  - danmestas/agent-skills/skills/hipp
 # Codex auth comes from the user-scope hub secret 'codex_auth' (set via:
 # scion hub secret set --type file --target /home/scion/.codex/auth.json codex_auth @~/.codex/auth.json)
 # No 'volumes:' block here — would duplicate the secret's mount target.
