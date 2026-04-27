@@ -35,6 +35,34 @@ else
   } >> "${CONFIG}"
 fi
 
-# --- 2. Hand off to scion ----------------------------------------------------
+# --- 2. spec-kit (planner-t4 only) ------------------------------------------
+#
+# planner-t4 is the only harness that needs the github/spec-kit CLI.
+# Installing it per-harness keeps the codex image small for the other
+# codex-backed roles (verifier, reviewer, sme, darwin).
+#
+# Install paths tried in order; first to succeed wins. Idempotent:
+# skips entirely when `specify` is already on PATH.
+
+if [[ "${SCION_TEMPLATE_NAME:-}" == "planner-t4" ]]; then
+  if ! command -v specify >/dev/null 2>&1; then
+    echo "darkish-prelude: installing spec-kit for planner-t4..." >&2
+    if npm install -g @github/spec-kit 2>/dev/null; then
+      echo "darkish-prelude: spec-kit via npm OK" >&2
+    else
+      TARBALL_URL="https://github.com/github/spec-kit/releases/latest/download/spec-kit-linux-x64.tar.gz"
+      if curl -fsSL "${TARBALL_URL}" -o /tmp/spec-kit.tgz; then
+        mkdir -p /opt/spec-kit
+        tar -xzf /tmp/spec-kit.tgz -C /opt/spec-kit
+        ln -sf /opt/spec-kit/specify /usr/local/bin/specify
+        echo "darkish-prelude: spec-kit via tarball OK" >&2
+      else
+        echo "darkish-prelude: WARNING — spec-kit install failed; planner-t4 will exit early" >&2
+      fi
+    fi
+  fi
+fi
+
+# --- 3. Hand off to scion ----------------------------------------------------
 
 exec sciontool init -- "$@"
