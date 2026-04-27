@@ -24,3 +24,6 @@
 
 # Darwin recommendation YAML emitted post-pipeline (operator decides via `darkish apply`).
 .scion/darwin-recommendations/
+
+# Built Go binaries
+/bin/
