@@ -2154,7 +2154,7 @@ The current roster has both on claude; spec §3.1 puts them on codex.
   Create `go.mod` at repo root:
 
   ```
-  module github.com/danmestas/darkish-factory
+  module github.com/danmestas/darken
 
   go 1.23
   ```

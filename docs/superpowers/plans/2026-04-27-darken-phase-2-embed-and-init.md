@@ -441,7 +441,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/danmestas/darkish-factory/internal/substrate"
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 // version is overridden at build time via -ldflags="-X main.version=v0.1.0".
@@ -646,7 +646,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/danmestas/darkish-factory/internal/substrate"
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 func runInit(args []string) error {

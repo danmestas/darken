@@ -1,4 +1,4 @@
-# .goreleaser.yaml — darkish-factory release config.
+# .goreleaser.yaml — darken release config.
 # See https://goreleaser.com/customization/ for the full schema.
 # Tag a vX.Y.Z release on main; .github/workflows/release.yaml fires
 # this from CI. Local snapshot: `goreleaser release --snapshot --clean`.
@@ -54,12 +54,12 @@ changelog:
 release:
   github:
     owner: danmestas
-    name: darkish-factory
+    name: darken
   draft: false
   prerelease: auto
   name_template: "darken {{ .Version }}"
   header: |
-    See [docs/RELEASING.md](https://github.com/danmestas/darkish-factory/blob/main/docs/RELEASING.md) for upgrade notes.
+    See [docs/RELEASING.md](https://github.com/danmestas/darken/blob/main/docs/RELEASING.md) for upgrade notes.
 
 brews:
   - name: darken
@@ -68,7 +68,7 @@ brews:
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: "https://github.com/danmestas/darkish-factory"
+    homepage: "https://github.com/danmestas/darken"
     description: "darken — Darkish Factory orchestration substrate CLI"
     license: "MIT"
     install: |

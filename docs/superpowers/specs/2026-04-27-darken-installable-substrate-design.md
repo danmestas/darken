@@ -12,7 +12,7 @@ The substrate (templates, scripts, dockerfiles, the orchestrator-side skill file
 
 ## Goals
 
-- One-line install on a fresh Mac: `brew install danmestas/tap/darken`. Fallbacks: `go install github.com/danmestas/darkish-factory/cmd/darken@latest` or downloading a release binary directly.
+- One-line install on a fresh Mac: `brew install danmestas/tap/darken`. Fallbacks: `go install github.com/danmestas/darken/cmd/darken@latest` or downloading a release binary directly.
 - Run orchestrator mode against any repo: `cd ~/projects/foo && darken init && claude code` — no clone of the substrate required.
 - Templates, scripts, the two host-orchestrator skills, and the four backend Dockerfiles ship inside the binary.
 - Operators can override at two scopes: project-local `.scion/templates/<role>/` (versioned with the working repo), user-scoped `~/.config/darken/overrides/<role>/` (per-machine).
@@ -27,7 +27,7 @@ The substrate (templates, scripts, dockerfiles, the orchestrator-side skill file
 
 ## Naming
 
-Binary: `darken`. The repo stays `darkish-factory`. The Go package path becomes `github.com/danmestas/darkish-factory/cmd/darken`. Avoids conflict with the unix `df` builtin (the user's first preference); `darken` is unambiguous on PATH.
+Binary: `darken`. The repo stays `darkish-factory`. The Go package path becomes `github.com/danmestas/darken/cmd/darken`. Avoids conflict with the unix `df` builtin (the user's first preference); `darken` is unambiguous on PATH.
 
 ## Architecture
 
@@ -99,7 +99,7 @@ Phase 4 deliverables:
 
 - **GitHub Releases**: `goreleaser` builds darwin/amd64+arm64 + linux/amd64+arm64 on tag push (`v*.*.*`).
 - **Homebrew tap**: `danmestas/homebrew-tap` repo, auto-published from goreleaser. Users: `brew install danmestas/tap/darken`.
-- **`go install`**: works directly from `github.com/danmestas/darkish-factory/cmd/darken@vX.Y.Z` once tagged.
+- **`go install`**: works directly from `github.com/danmestas/darken/cmd/darken@vX.Y.Z` once tagged.
 - **Direct download**: GitHub Release artifacts for users who can't use the above.
 
 Initial tag: `v0.1.0`. Pre-1.0 reflects "single user, breaking changes likely."
