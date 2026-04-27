@@ -366,7 +366,198 @@ operator can override at dispatch time.
 - **Stage-skills.sh in `--add` mode persistence.** Does an ad-hoc add survive across orchestrator restarts, or is it session-scoped? Default: session-scoped (orchestrator's audit log records it; restart re-stages from manifest only).
 - **Bones authorization.** Sub-agents spawned by a harness run with what credentials? Inherit from parent harness, or get their own scoped secret? Default: inherit. Confirm.
 
-## 12. Cross-references
+## 12. Operator workflow tooling
+
+The architecture is sound; the operator-facing surface is not. Without
+the tooling in this section, the daily workflows (spawn an agent, debug
+a failure) and the rare-but-painful workflows (bootstrap, add a new
+harness) require tribal knowledge and multi-step rituals. This section
+specifies the wrapper layer that makes the system livable.
+
+The deliverable is a single `darkish` Go CLI plus two host-side scripts.
+Conventions follow the constitution (Go + zero deps).
+
+### 12.1 `darkish doctor [<harness>]`
+
+Single command, two modes — preflight and post-mortem.
+
+**Preflight** (`darkish doctor <harness>`, before spawning):
+
+- Verifies `local/darkish-<backend>:latest` is built locally.
+- Verifies `scion server` is running and grove is linked.
+- Verifies hub secret for the harness's backend is present (`scion hub secret list`).
+- Verifies `<repo>/.scion/skills-staging/<harness>/` is populated and matches the manifest's `skills:` declaration.
+- Reports go/no-go with specific remediation per failed check (links §9 row).
+
+**Post-mortem** (`darkish doctor <harness>`, after a failed spawn):
+
+- Reads recent scion broker error and audit-log entries for the agent.
+- Maps the error pattern to the §9 failure-mode row (e.g.,
+  `auth resolution failed: codex` → "push codex hub secret").
+- Prints the exact recovery command.
+
+`darkish doctor` (no argument) runs broad health: image inventory, scion
+server status, all hub secrets present, the four canonical skill repo
+paths reachable. Used at session start to catch environmental drift.
+
+### 12.2 Spawn workflow integration
+
+`scripts/spawn.sh` (and the equivalent `darkish spawn` subcommand) runs
+both `stage-creds.sh` AND `stage-skills.sh <harness>` before invoking
+`scion start`. This eliminates the hidden-precondition pain in workflow
+#1. Idempotent — re-runs are cheap (each underlying step is idempotent).
+
+A `--no-stage` flag bypasses staging when the operator knows nothing has
+changed and wants the fastest spawn.
+
+### 12.3 `darkish bootstrap`
+
+Orchestrates first-time setup on a machine. Idempotent — skips steps
+already complete.
+
+Steps in order:
+
+1. Verify `~/projects/scion` exists; if not, clone or fail with instructions.
+2. Run `make install` in scion. Verify `scion --help` works.
+3. Verify Docker daemon is reachable.
+4. Run `scion server start` if not already running; wait for hub healthcheck.
+5. Verify grove is linked (`scion config get grove_id`); if not, run `scion list` once to auto-link.
+6. Build all four scion-* base images by direct `docker build` (workaround
+   for the `--target all` buildx-array bug).
+7. Run `make -C images all` to build the four `darkish-*` images.
+8. Run `scripts/stage-creds.sh all`.
+9. For each harness in `.scion/templates/`, run `scripts/stage-skills.sh <name>`.
+10. Run `darkish doctor` for a final health check.
+
+On failure at any step, prints which step failed, the exact command to
+re-run, and any prerequisite the operator must satisfy first (e.g.,
+"Codex Max not authenticated — run `codex login`").
+
+### 12.4 darwin recommendation format and apply path
+
+`darwin` writes structured recommendations to
+`<repo>/.scion/darwin-recommendations/<date>-<run-id>.yaml`. Format:
+
+```yaml
+session: 2026-04-26-pipeline-A
+analysis_window: [<start>, <end>]
+recommendations:
+  - id: rec-001
+    target_harness: tdd-implementer
+    type: skill_add | skill_remove | skill_upgrade | model_swap | prompt_edit | rule_add
+    rationale: <one paragraph>
+    evidence:
+      - <transcript line / audit log entry / metric>
+    proposed_change:
+      # union per type — examples:
+      # skill_add: { skill: "danmestas/agent-skills/skills/idiomatic-go" }
+      # model_swap: { from: "claude-sonnet-4-6", to: "claude-opus-4-7" }
+      # prompt_edit: { file: "system-prompt.md", before: "...", after: "..." }
+    confidence: 0.0..1.0
+    reversibility: trivial | moderate | high
+```
+
+`darkish apply <recommendation-file>` reads the YAML, presents each
+recommendation to the operator for approval (`y/n/skip/edit`), applies
+approved changes (mutating the relevant manifest, committing the change
+in git, re-staging skills if needed), and records ratifications in the
+audit log. The escalation classifier (Slice 1) decides for each
+recommendation whether operator approval is required (taste / ethics /
+reversibility axes mandate it; trivial reversibility may auto-apply per
+operator policy).
+
+`darkish apply --dry-run <file>` prints what would change without
+modifying anything.
+
+This grounds darwin's "evolves rules and skills" loop in a concrete,
+auditable, operator-gated mechanism.
+
+### 12.5 `darkish create-harness <role>`
+
+Scaffolder. Generates a new harness directory with the three required
+files:
+
+```bash
+darkish create-harness <role> \
+  --backend <claude|codex|pi|gemini> \
+  --model <model-id> \
+  --skills "<comma-separated-APM-refs>" \
+  --description "<one sentence>"
+```
+
+Produces:
+
+- `.scion/templates/<role>/scion-agent.yaml` (filled per the manifest
+  shape in §7).
+- `.scion/templates/<role>/agents.md` (templated worker protocol with
+  caveman tier directive baked in).
+- `.scion/templates/<role>/system-prompt.md` (templated identity stub
+  the operator fills in).
+- A new entry in `.design/harness-roster.md`.
+- Adds the role to the routing classifier rule set if `--routing-tier`
+  is provided.
+
+Workflow #7 collapses from 5 manual steps to one command + filling in
+the system-prompt stub.
+
+### 12.6 `darkish skills <harness>`
+
+Lists the harness's staged skills, source path of each, and the
+manifest-vs-staging diff (skills declared but not staged, or staged but
+not declared — drift detection).
+
+```
+darkish skills sme
+  ousterhout    ~/projects/agent-skills/skills/ousterhout (in sync)
+  hipp          ~/projects/agent-skills/skills/hipp (in sync)
+  drift: 0
+```
+
+`darkish skills <harness> --diff` shows file-level differences between
+canonical and staged copies (when canonical has been updated since last
+stage).
+
+`darkish skills <harness> --add <skill>` and `--remove <skill>`
+mutate the manifest plus re-stage in one command.
+
+### 12.7 The `darkish` Go CLI
+
+Single binary that wraps all operator-facing operations:
+
+| Subcommand | What it does |
+|---|---|
+| `darkish doctor [<harness>]` | preflight + post-mortem (§12.1) |
+| `darkish spawn <name> --type <role> [--backend <X>] "<task>"` | stage creds + skills + scion start (§12.2) |
+| `darkish bootstrap` | first-time setup (§12.3) |
+| `darkish apply <file>` | review + apply darwin recommendations (§12.4) |
+| `darkish create-harness <role> ...` | scaffold a new harness (§12.5) |
+| `darkish skills <harness> [--diff|--add|--remove]` | manage staged skills (§12.6) |
+| `darkish creds [<backend>]` | wraps `stage-creds.sh` (refresh hub secrets) |
+| `darkish images [<backend>]` | wraps `make -C images <target>` |
+| `darkish list` | thin wrapper over `scion list` with darkish-specific columns |
+
+Built in Go, zero third-party dependencies (per constitution §I), shell
+out to `scion` for runtime calls, shell out to `docker` for image
+operations, parse manifest YAML directly. Lives at `cmd/darkish/` in
+this repo.
+
+The bash scripts (`scripts/spawn.sh`, `scripts/stage-creds.sh`,
+`scripts/stage-skills.sh`) remain as thin shims behind the Go CLI for
+operators who want to invoke them directly. They share implementation
+via a small `internal/staging` package.
+
+### 12.8 What this section is NOT
+
+- Not a re-architecture. The image, manifest, skill, and auth layers
+  from §3-§7 are unchanged. This is the wrapper that makes them
+  operator-friendly.
+- Not optional. The DX audit scored daily workflows at 6/10 (spawn) and
+  4/10 (debug). Without this section's tooling, the architecture is
+  shippable but unlivable.
+- Not future scope. These tools are part of the implementation plan;
+  not a "phase 2" or "nice-to-have."
+
+## 13. Cross-references
 
 - Slice 1 (escalation classifier): `/Users/dmestas/projects/darkish-factory/docs/superpowers/specs/2026-04-25-escalation-classifier-design.md`
 - Slice 2 (orchestrator + runtime adapter): `/Users/dmestas/projects/darkish-factory/docs/superpowers/specs/2026-04-25-orchestrator-skeleton-design.md`
