@@ -12,8 +12,19 @@
 # Override registry / tag:
 #   make claude REGISTRY=ghcr.io/danmestas TAG=v0.1.0
 
-REGISTRY ?= local
-TAG      ?= latest
+REGISTRY         ?= local
+TAG              ?= latest
+AGENT_INFRA_PATH ?= $(HOME)/projects/agent-infra
+
+# prebuild-bones: cross-compile agent-infra binaries on the host for linux/arm64.
+# Required before running `make claude` because agent-infra and its dependency
+# EdgeSync/leaf are private repos (no credentials in Docker build context).
+.PHONY: prebuild-bones
+prebuild-bones:
+	mkdir -p claude/bin
+	cd $(AGENT_INFRA_PATH) && \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/agent-init ./cmd/agent-init && \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/agent-tasks ./cmd/agent-tasks
 
 .PHONY: claude
 claude:
