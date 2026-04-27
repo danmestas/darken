@@ -11,7 +11,7 @@ import (
 
 func runSpawn(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: darkish spawn <name> --type <role> [...]")
+		return errors.New("usage: darken spawn <name> --type <role> [...]")
 	}
 	name := args[0]
 

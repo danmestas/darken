@@ -16,7 +16,7 @@ import (
 //  2. ~/projects/agent-skills/skills/orchestrator-mode/SKILL.md (canonical)
 func runOrchestrate(args []string) error {
 	if len(args) > 0 {
-		return errors.New("usage: darkish orchestrate")
+		return errors.New("usage: darken orchestrate")
 	}
 
 	candidates := []string{}

@@ -275,7 +275,7 @@ pipeline run completes
   → audit log + transcripts persisted
   → darwin invoked over the run window
   → darwin emits .scion/darwin-recommendations/<date>-<run-id>.yaml
-  → operator reviews via `darkish apply <file>` (y/n/skip/edit per recommendation)
+  → operator reviews via `darken apply <file>` (y/n/skip/edit per recommendation)
   → approved recommendations mutate the relevant manifest, commit the change in git, re-stage skills if needed
   → ratifications recorded in the audit log
 ```
@@ -285,7 +285,7 @@ Recommendation types (spec §12.4): `skill_add`, `skill_remove`, `skill_upgrade`
 `darwin` never mutates state directly. The mechanism is intentionally operator-gated:
 
 - The escalation classifier (taste / ethics / reversibility axes) runs against each recommendation. Trivial-reversibility recommendations may auto-apply if operator policy permits; everything else routes to operator review.
-- `darkish apply --dry-run <file>` prints what would change without modifying anything.
+- `darken apply --dry-run <file>` prints what would change without modifying anything.
 - The audit log records every ratification (approved / skipped / edited), making the evolution loop replay-safe.
 
 This grounds darwin's "evolves rules and skills" loop in a concrete, auditable, operator-gated mechanism. The recommendations may add or remove skills, adjust tier defaults, swap models, edit system prompts, or tighten constitution clauses — but only the operator decides what lands.

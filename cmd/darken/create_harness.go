@@ -11,7 +11,7 @@ import (
 
 func runCreateHarness(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: darkish create-harness <role> --backend X --model Y --skills A,B --description '...' [--max-turns N --axes 'taste,reversibility']")
+		return errors.New("usage: darken create-harness <role> --backend X --model Y --skills A,B --description '...' [--max-turns N --axes 'taste,reversibility']")
 	}
 	role := args[0]
 

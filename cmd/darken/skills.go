@@ -7,7 +7,7 @@ import (
 
 func runSkills(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: darkish skills <harness> [--diff|--add SKILL|--remove SKILL]")
+		return errors.New("usage: darken skills <harness> [--diff|--add SKILL|--remove SKILL]")
 	}
 	root, err := repoRoot()
 	if err != nil {

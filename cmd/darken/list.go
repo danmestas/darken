@@ -7,7 +7,7 @@ import (
 
 // runList is a thin passthrough to `scion list` for now.
 //
-// FUTURE: Spec §12.7 envisions darkish-specific column reformat (e.g.
+// FUTURE: Spec §12.7 envisions darken-specific column reformat (e.g.
 // template / grove / broker / phase) on top of `scion list --format
 // json`. Tracked in Open Questions; this initial implementation
 // streams scion output unchanged so operators get parity day-1.

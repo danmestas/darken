@@ -30,7 +30,7 @@ func doctorBroad() (string, error) {
 		{"scion CLI present", checkScion},
 		{"scion server status", checkScionServer},
 		{"hub secrets present", checkHubSecrets},
-		{"darkish images built", checkImages},
+		{"darken images built", checkImages},
 	}
 
 	var sb strings.Builder
@@ -119,17 +119,17 @@ func remediationFor(check string, err error) string {
 		return "scion server start"
 	case "hub secrets present", "secret":
 		return "scripts/stage-creds.sh"
-	case "darkish images built", "image":
+	case "darken images built", "image":
 		return "make -C images"
 	case "staging", "staging-mismatch":
-		return "darkish skills <harness>"
+		return "darken skills <harness>"
 	}
 	// Fallback for callers passing free-form check names.
 	if err != nil {
 		msg := err.Error()
 		switch {
 		case strings.Contains(msg, "is a directory") || strings.Contains(msg, "directory symlink"):
-			return "Switch to copy-staging via `darkish skills <harness>` (never use directory symlinks)"
+			return "Switch to copy-staging via `darken skills <harness>` (never use directory symlinks)"
 		case strings.Contains(msg, "caveman tier mismatch"):
 			return "Update <harness>/system-prompt.md Communication section; flag to darwin"
 		}
@@ -216,8 +216,8 @@ func postMortemFor(logPath string) string {
 	patterns := []struct{ needle, reason, fix string }{
 		{"auth resolution failed:", "missing hub secret", "Run `scripts/stage-creds.sh <backend>` then re-spawn"},
 		{"pull access denied", "image not built locally", "Run `make -C images <backend>`"},
-		{"is a directory", "skills symlink-to-directory regression", "Use `darkish skills <harness>` (copy-staging)"},
-		{"no such image", "darkish image missing", "Run `make -C images all`"},
+		{"is a directory", "skills symlink-to-directory regression", "Use `darken skills <harness>` (copy-staging)"},
+		{"no such image", "darken image missing", "Run `make -C images all`"},
 	}
 	for _, p := range patterns {
 		if strings.Contains(string(body), p.needle) {

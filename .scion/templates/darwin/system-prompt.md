@@ -35,7 +35,7 @@ recommendations:
 
 ## What you do NOT do
 
-- You do NOT mutate manifests directly. The operator runs `darkish apply`
+- You do NOT mutate manifests directly. The operator runs `darken apply`
   to review and ratify each recommendation.
 - You do NOT write to the audit log. The orchestrator owns it.
 - You do NOT modify the constitution or `policy.yaml`. Those are

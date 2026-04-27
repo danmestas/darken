@@ -36,7 +36,7 @@ func runApply(args []string) error {
 	}
 	pos := fs.Args()
 	if len(pos) != 1 {
-		return errors.New("usage: darkish apply [--dry-run] <recommendation-file>")
+		return errors.New("usage: darken apply [--dry-run] <recommendation-file>")
 	}
 	recs, err := parseRecommendations(pos[0])
 	if err != nil {

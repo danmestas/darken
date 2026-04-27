@@ -2,7 +2,7 @@
 # Live smoke test for planner-t4 + spec-kit prelude.
 #
 # Prerequisites:
-#   - bin/darkish built (`make darkish`)
+#   - bin/darken built (`make darken`)
 #   - darkish-codex image built with F-01's prelude (`make -C images codex`)
 #   - scion server running, hub secrets staged (codex_auth)
 #

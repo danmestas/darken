@@ -1,4 +1,4 @@
-// Package main is the darkish operator CLI.
+// Package main is the darken operator CLI.
 package main
 
 import (
@@ -46,20 +46,20 @@ func main() {
 	for _, sc := range subcommands {
 		if sc.name == args[0] {
 			if err := sc.run(args[1:]); err != nil {
-				fmt.Fprintln(os.Stderr, "darkish:", err)
+				fmt.Fprintln(os.Stderr, "darken:", err)
 				os.Exit(1)
 			}
 			return
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "darkish: unknown subcommand %q\n", args[0])
+	fmt.Fprintf(os.Stderr, "darken: unknown subcommand %q\n", args[0])
 	printUsage()
 	os.Exit(2)
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: darkish <subcommand> [flags] [args]")
+	fmt.Fprintln(os.Stderr, "Usage: darken <subcommand> [flags] [args]")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	for _, sc := range subcommands {

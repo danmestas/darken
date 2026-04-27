@@ -16,7 +16,7 @@ func runBootstrap(args []string) error {
 		{"docker daemon reachable", checkDocker},
 		{"scion CLI present", checkScion},
 		{"scion server running", ensureScionServer},
-		{"darkish images built", ensureImages},
+		{"darken images built", ensureImages},
 		{"hub secrets pushed", ensureHubSecrets},
 		{"per-harness skills staged", ensureAllSkillsStaged},
 		{"final doctor", finalDoctor},
@@ -39,7 +39,7 @@ func ensureScionServer() error {
 	return exec.Command("scion", "server", "start").Run()
 }
 
-// ensureImages builds any missing darkish images via `make -C images <backend>`.
+// ensureImages builds any missing darken images via `make -C images <backend>`.
 func ensureImages() error {
 	for _, b := range []string{"claude", "codex", "pi", "gemini"} {
 		if imageExists("local/darkish-" + b + ":latest") {
