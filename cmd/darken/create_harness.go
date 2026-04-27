@@ -70,13 +70,54 @@ func runCreateHarness(args []string) error {
 	if err != nil {
 		return err
 	}
-	row := fmt.Sprintf("| `%s` | %s | %d | %s | false | %s | %s |\n",
-		role, *model, *maxTurns, "1h", *axes, *desc)
-	// The real harness-roster.md has a blank line after the heading; the
-	// anchor "## Roster\n\n" matches both fixtures and the live doc.
-	out := strings.Replace(string(body), "## Roster\n\n",
-		"## Roster\n\n"+row, 1)
+	// 8 cells matching .design/harness-roster.md header:
+	// Role | Backend | Model | Max turns | Max duration | Detached | Axes | One-line role.
+	row := fmt.Sprintf("| `%s` | %s | %s | %d | %s | false | %s | %s |\n",
+		role, *backend, *model, *maxTurns, "1h", *axes, *desc)
+	out, err := insertAfterTableSeparator(string(body), row)
+	if err != nil {
+		return fmt.Errorf("%s: %w", rosterPath, err)
+	}
 	return os.WriteFile(rosterPath, []byte(out), 0o644)
+}
+
+// insertAfterTableSeparator finds the first markdown table separator
+// line (e.g. "|---|---|---|") in body and inserts row immediately
+// after it. This places new entries inside the table body rather than
+// above its header. Returns an error if no separator is found —
+// silent fall-through would corrupt the roster.
+func insertAfterTableSeparator(body, row string) (string, error) {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if isMarkdownTableSeparator(strings.TrimSpace(line)) {
+			newRow := strings.TrimRight(row, "\n")
+			out := append([]string{}, lines[:i+1]...)
+			out = append(out, newRow)
+			out = append(out, lines[i+1:]...)
+			return strings.Join(out, "\n"), nil
+		}
+	}
+	return "", errors.New("missing markdown table separator (|---|---|...)")
+}
+
+// isMarkdownTableSeparator reports whether line is a GitHub-flavored
+// markdown table separator: pipe-delimited cells of dashes (with
+// optional alignment colons), e.g. "|---|---|---|" or "|:---|---:|".
+func isMarkdownTableSeparator(line string) bool {
+	if !strings.HasPrefix(line, "|") || !strings.HasSuffix(line, "|") || len(line) < 5 {
+		return false
+	}
+	inner := strings.Trim(line, "|")
+	cells := strings.Split(inner, "|")
+	for _, c := range cells {
+		c = strings.TrimSpace(c)
+		c = strings.TrimLeft(c, ":")
+		c = strings.TrimRight(c, ":")
+		if len(c) < 3 || strings.Trim(c, "-") != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func splitNonEmpty(s, sep string) []string {
