@@ -18,3 +18,9 @@
 *.swo
 .idea/
 .vscode/
+
+# Per-harness staged skills (rebuilt on each spawn from manifest).
+.scion/skills-staging/
+
+# Darwin recommendation YAML emitted post-pipeline (operator decides via `darkish apply`).
+.scion/darwin-recommendations/
