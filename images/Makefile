@@ -92,3 +92,76 @@ clean:
 	docker rmi $(REGISTRY)/darkish-codex:$(TAG) || true
 	docker rmi $(REGISTRY)/darkish-pi:$(TAG) || true
 	docker rmi $(REGISTRY)/darkish-gemini:$(TAG) || true
+
+# ----- Fast-rebuild targets -----
+# Rebuild only the final stage (apt, bones, caveman, context-mode, prelude).
+# Faster than `make claude` when only the prelude or tool layer changed.
+
+.PHONY: tools-only-claude tools-only-codex tools-only-pi tools-only-gemini tools-only-all
+
+tools-only-claude:
+	docker build \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-claude:$(TAG) \
+		--target final \
+		--no-cache-filter final \
+		-t $(REGISTRY)/darkish-claude:$(TAG) \
+		-f claude/Dockerfile \
+		claude
+
+tools-only-codex:
+	docker build \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-codex:$(TAG) \
+		--target final \
+		--no-cache-filter final \
+		-t $(REGISTRY)/darkish-codex:$(TAG) \
+		-f codex/Dockerfile \
+		codex
+
+tools-only-pi:
+	docker build \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-pi:$(TAG) \
+		--target final \
+		--no-cache-filter final \
+		-t $(REGISTRY)/darkish-pi:$(TAG) \
+		-f pi/Dockerfile \
+		pi
+
+tools-only-gemini:
+	docker build \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-gemini:$(TAG) \
+		--target final \
+		--no-cache-filter final \
+		-t $(REGISTRY)/darkish-gemini:$(TAG) \
+		-f gemini/Dockerfile \
+		gemini
+
+tools-only-all: tools-only-claude tools-only-codex tools-only-pi tools-only-gemini
+
+# prelude-only-*: full no-cache rebuild for any prelude-script change.
+# Heavier than tools-only-* but rebuilds the prelude COPY layer reliably.
+
+.PHONY: prelude-only-claude prelude-only-codex prelude-only-pi prelude-only-gemini
+
+prelude-only-claude:
+	docker build --no-cache \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-claude:$(TAG) \
+		-t $(REGISTRY)/darkish-claude:$(TAG) \
+		-f claude/Dockerfile claude
+
+prelude-only-codex:
+	docker build --no-cache \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-codex:$(TAG) \
+		-t $(REGISTRY)/darkish-codex:$(TAG) \
+		-f codex/Dockerfile codex
+
+prelude-only-pi:
+	docker build --no-cache \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-pi:$(TAG) \
+		-t $(REGISTRY)/darkish-pi:$(TAG) \
+		-f pi/Dockerfile pi
+
+prelude-only-gemini:
+	docker build --no-cache \
+		--build-arg BASE_IMAGE=$(REGISTRY)/scion-gemini:$(TAG) \
+		-t $(REGISTRY)/darkish-gemini:$(TAG) \
+		-f gemini/Dockerfile gemini
