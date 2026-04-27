@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/danmestas/darkish-factory/internal/substrate"
 )
 
 type check struct {
@@ -143,9 +145,14 @@ func doctorHarness(name string) (string, error) {
 		return "", err
 	}
 
-	manifestPath := filepath.Join(root, ".scion", "templates", name, "scion-agent.yaml")
-	body, err := os.ReadFile(manifestPath)
+	manifestRel := ".scion/templates/" + name + "/scion-agent.yaml"
+	resolver := substrateResolver()
+	_, manifestLayer, _ := resolver.Lookup(manifestRel)
+	body, err := resolver.ReadFile(manifestRel)
 	if err != nil {
+		if substrate.IsMiss(err) {
+			return "", fmt.Errorf("no template defined for harness %s (override missing; embed comes in Phase 2)", name)
+		}
 		return "", fmt.Errorf("manifest read: %w", err)
 	}
 	backend := scanField(string(body), "default_harness_config:")
@@ -153,6 +160,8 @@ func doctorHarness(name string) (string, error) {
 
 	var sb strings.Builder
 	var failed []string
+
+	fmt.Fprintf(&sb, "OK    manifest %s served from %s layer\n", name, manifestLayer)
 
 	imgTag := fmt.Sprintf("local/darkish-%s:latest", backend)
 	if !imageExists(imgTag) {

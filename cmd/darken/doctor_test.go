@@ -48,6 +48,37 @@ func TestDoctorHarnessChecksImageSecretAndStaging(t *testing.T) {
 	}
 }
 
+func TestDoctorHarnessReadsUserOverridesLayer(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKISH_REPO_ROOT", tmp)
+
+	// User-scope override directory in the same tmp tree (so we can mutate
+	// it without touching the real ~/.config/darken/overrides/).
+	overrideHome := filepath.Join(tmp, "fakehome")
+	t.Setenv("HOME", overrideHome)
+
+	overrideDir := filepath.Join(overrideHome, ".config", "darken", "overrides", ".scion", "templates", "smeoverride")
+	if err := os.MkdirAll(overrideDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideDir, "scion-agent.yaml"),
+		[]byte("default_harness_config: claude\nskills: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plant docker/scion stubs so doctorHarness's image+secret checks don't
+	// hang on real binaries.
+	stubDir := t.TempDir()
+	os.WriteFile(filepath.Join(stubDir, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	os.WriteFile(filepath.Join(stubDir, "scion"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", stubDir)
+
+	report, _ := doctorHarness("smeoverride")
+	if !strings.Contains(report, "user layer") {
+		t.Fatalf("expected report to identify user layer; got: %q", report)
+	}
+}
+
 func TestDoctorHarnessPostMortemMapsAuthError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DARKISH_REPO_ROOT", dir)
