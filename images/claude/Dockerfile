@@ -1,49 +1,54 @@
-# darkish-claude — extends scion-claude with the Darkish Factory's tool baseline,
-# folder-trust prelude, and OAuth credential mounting.
+# darkish-claude — universal baseline + claude backend.
+# Layers ordered heaviest-at-bottom for cache efficiency.
 #
-# Build:
-#   make -C images claude          (or: docker build -t local/darkish-claude:latest -f images/claude/Dockerfile images/claude)
-#
-# This image must be tagged so scion finds it. Each harness's scion-agent.yaml
-# sets `image: local/darkish-claude:latest` (or the ghcr.io tag once published).
+# NOTE (A-01 blockers resolved):
+#   - agent-infra and its dependency EdgeSync/leaf are private repos.
+#     Binaries are pre-compiled on the host (CGO_ENABLED=0 GOOS=linux) and
+#     copied from ./bin/ into the image. The bones-builder stage is omitted
+#     until SSH/netrc credentials can be mounted at build time.
+#     Restore the multi-stage build once the repos are public or CI has creds.
+#   - mgrep-code-search is also private; omitted until accessible.
+#   - Only 4 cmds exist in the current agent-infra (agent-init, agent-tasks,
+#     orchestrator-validate-plan, space-invaders-orchestrate); the 12 remaining
+#     binaries from the spec do not yet exist. Only agent-init and agent-tasks
+#     are included as they are the core operational primitives.
+#   - agent-infra requires go 1.26; pre-built on go 1.26.2 darwin/arm64 for
+#     linux/arm64 target.
 
 ARG BASE_IMAGE=local/scion-claude:latest
+
 FROM ${BASE_IMAGE}
 
 USER root
 
-# 1. Apt utilities.
-#    Heaviest layer first so it caches across rebuilds when only the prelude
-#    or tool list churns.
+# 1. Apt utilities (heaviest, churns least).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      jq \
-      ripgrep \
-      fzf \
-      less \
-      gh \
+      jq ripgrep fzf less gh ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Go-installed tools (custom CLIs, semantic search, etc).
-#    Placeholder — operator fills in. Examples:
-#      RUN go install github.com/danmestas/mgrep-code-search/cmd/mgrep@latest
-#    Kept empty here so this layer rebuilds independently when tools change.
+# 2. Pre-built bones binaries (agent-init, agent-tasks).
+#    Compiled on host: CGO_ENABLED=0 GOOS=linux GOARCH=arm64
+#    Refresh with: make -C images prebuild-bones
+COPY bin/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/agent-init /usr/local/bin/agent-tasks
 
-# 3. NPM-installed MCPs.
-#    Placeholder. Examples:
-#      RUN npm install -g <mcp-package>
+# 3. Universal skill: caveman.
+RUN mkdir -p /home/scion/skills && \
+    git clone --depth 1 https://github.com/juliusbrussee/caveman \
+      /home/scion/skills/caveman && \
+    chown -R scion:scion /home/scion/skills
 
-# 4. Pip-installed MCPs.
-#    Placeholder. Examples:
-#      RUN pip install <python-mcp> --no-cache-dir
+# 4. Universal MCP: context-mode.
+RUN npm install -g @mksglu/context-mode || \
+    (echo "context-mode npm install failed; falling back to git clone" && \
+     git clone --depth 1 https://github.com/mksglu/context-mode \
+       /opt/context-mode && \
+     cd /opt/context-mode && npm install --production)
 
-# 5. Prelude: folder-trust + OAuth file → env var.
+# 5. Prelude.
 COPY darkish-prelude.sh /usr/local/bin/darkish-prelude.sh
 RUN chmod +x /usr/local/bin/darkish-prelude.sh
 
-# Reset to scion's standard user.
 USER scion
 WORKDIR /workspace
-
-# Override the entrypoint so our prelude runs before sciontool init.
 ENTRYPOINT ["/usr/local/bin/darkish-prelude.sh"]
-# CMD is inherited from the base image.
