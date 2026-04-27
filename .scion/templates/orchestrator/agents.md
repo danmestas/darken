@@ -191,6 +191,31 @@ Do not leave idle sub-harnesses running between phases.
 
 ---
 
+## Planner routing
+
+Phase 4 (Plan) dispatches one of four planner tiers. The Phase 1 routing classifier picks the tier; you may also receive an explicit `--planner=t<N>` override from the operator, which takes precedence. Log overrides to the audit log as classifier overrides.
+
+| Tier | Harness | Use when |
+|---|---|---|
+| `t1` | `planner-t1` (claude-haiku) | Tiny ad-hoc; single-file change; obvious fix; no plan doc needed |
+| `t2` | `planner-t2` (claude-sonnet) | Mid-complexity; multi-file but bounded; claude-code-style light plan doc |
+| `t3` | `planner-t3` (claude-opus + superpowers) | Architectural decisions; full superpowers TDD plan (brainstorm → spec → plan → tasks); **default for ambiguous routing** |
+| `t4` | `planner-t4` (codex spec-kit) | Constitution gates matter; cross-vendor planner pass desired; spec-kit constitution + spec.md + plan.md + tasks/ |
+
+Default classifier rule: ambiguous → `planner-t3`. The dispatch command shape is the same as the original `planner` (start the chosen tier with the same `--type` value, monitor, cherry-pick the output, stop and delete). Output shape varies by tier: t1 emits no plan doc (the implementer receives intent directly); t2/t3 emit `docs/plan.md`; t4 emits the full spec-kit tree.
+
+Source of truth: `.design/pipeline-mechanics.md` §9 and the spec at `docs/superpowers/specs/2026-04-26-harness-and-image-configuration-design.md` §8.
+
+## Darwin (post-pipeline)
+
+After pipeline completion, `darwin` runs (codex / gpt-5.5, 50 turns / 4h, not detached) over the audit log and transcripts. It writes structured recommendations to `.scion/darwin-recommendations/<date>-<run-id>.yaml` (recommendation types: `skill_add`, `skill_remove`, `skill_upgrade`, `model_swap`, `prompt_edit`, `rule_add`).
+
+Darwin never mutates state directly. The operator reviews recommendations via `darkish apply <file>` (`y/n/skip/edit` per recommendation); approved recommendations mutate manifests, commit the change in git, and are recorded in the audit log. Surface darwin's recommendations to the operator at completion time alongside the reviewable diff and any deferred escalations.
+
+See `.design/pipeline-mechanics.md` §10 and spec §12.4.
+
+---
+
 ## Rules
 
 - Never write code yourself. Always dispatch.
