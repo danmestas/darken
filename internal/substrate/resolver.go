@@ -14,6 +14,11 @@
 // Layer 4 is special: only paths starting with ".scion/templates/"
 // resolve here. This lets a working repo version-control its own role
 // overrides without polluting other override scopes.
+//
+// Substrate-relative paths must always use forward slashes regardless
+// of operating system. The prefix check at layer 4 is a literal string
+// match against ".scion/templates/" — callers passing filepath.Join
+// results on Windows would slip past it.
 package substrate
 
 import (
@@ -42,8 +47,9 @@ type Resolver struct {
 	projectDir string
 }
 
-// New builds a Resolver from the given Config. The DARKEN_SUBSTRATE_OVERRIDES
-// env var is captured at construction time.
+// New builds a Resolver from the given Config. The
+// DARKEN_SUBSTRATE_OVERRIDES env var is snapshotted at construction
+// time; subsequent changes are not observed by the returned Resolver.
 func New(cfg Config) *Resolver {
 	return &Resolver{
 		flagDir:    cfg.FlagOverride,
@@ -62,7 +68,10 @@ func (r *Resolver) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(p)
 }
 
-// Open resolves name and returns an open file handle.
+// Open resolves name and returns an open file handle. Returns
+// fs.File rather than *os.File for forward-compat with Phase 2's
+// embedded layer (which yields fs.File but not *os.File). Callers
+// must not type-assert to *os.File.
 func (r *Resolver) Open(name string) (fs.File, error) {
 	p, err := r.resolve(name)
 	if err != nil {
