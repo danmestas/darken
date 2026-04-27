@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// repoRoot returns the repo root, preferring DARKISH_REPO_ROOT for tests.
+// repoRoot returns the repo root, preferring DARKEN_REPO_ROOT for tests.
 func repoRoot() (string, error) {
-	if v := os.Getenv("DARKISH_REPO_ROOT"); v != "" {
+	if v := os.Getenv("DARKEN_REPO_ROOT"); v != "" {
 		return v, nil
 	}
 	return findRepoRoot()

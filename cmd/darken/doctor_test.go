@@ -26,7 +26,7 @@ func TestDoctorReportsMissingScion(t *testing.T) {
 
 func TestDoctorHarnessChecksImageSecretAndStaging(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("DARKISH_REPO_ROOT", dir)
+	t.Setenv("DARKEN_REPO_ROOT", dir)
 
 	// Plant stubs so the test doesn't depend on the dev box's real docker / scion state.
 	stubDir := t.TempDir()
@@ -50,7 +50,7 @@ func TestDoctorHarnessChecksImageSecretAndStaging(t *testing.T) {
 
 func TestDoctorHarnessReadsUserOverridesLayer(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("DARKISH_REPO_ROOT", tmp)
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
 
 	// User-scope override directory in the same tmp tree (so we can mutate
 	// it without touching the real ~/.config/darken/overrides/).
@@ -81,7 +81,7 @@ func TestDoctorHarnessReadsUserOverridesLayer(t *testing.T) {
 
 func TestDoctorHarnessPostMortemMapsAuthError(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("DARKISH_REPO_ROOT", dir)
+	t.Setenv("DARKEN_REPO_ROOT", dir)
 	logDir := filepath.Join(dir, ".scion", "agents", "smoke-1")
 	os.MkdirAll(logDir, 0o755)
 	os.WriteFile(filepath.Join(logDir, "agent.log"),

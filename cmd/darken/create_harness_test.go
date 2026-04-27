@@ -9,7 +9,7 @@ import (
 
 func TestCreateHarnessProducesFiles(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("DARKISH_REPO_ROOT", tmp)
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
 	os.MkdirAll(filepath.Join(tmp, ".scion", "templates"), 0o755)
 	os.MkdirAll(filepath.Join(tmp, ".design"), 0o755)
 	os.WriteFile(filepath.Join(tmp, ".design", "harness-roster.md"),
