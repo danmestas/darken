@@ -17,7 +17,7 @@ bash "${REPO}/scripts/stage-skills.sh" sme
 scion --no-hub create sme-skills-smoke --type sme --workspace /tmp/scion-smoke \
   "List file names directly under /home/scion/skills/ and tell me what role-specific skills you have. Answer in two short lines." >/dev/null
 
-scion --no-hub start sme-skills-smoke 2>&1 | head -5
+scion --no-hub start sme-skills-smoke 2>&1 | head -5 || true
 
 # Wait up to 90s for terminal state
 for _ in $(seq 1 45); do
