@@ -10,3 +10,5 @@ dependencies:
     - danmestas/agent-skills/skills/idiomatic-go
     - danmestas/agent-skills/skills/norman
     - danmestas/agent-skills/skills/dx-audit
+    - danmestas/agent-skills/skills/superpowers
+    - danmestas/agent-skills/skills/spec-kit
