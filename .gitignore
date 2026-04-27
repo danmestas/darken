@@ -35,3 +35,6 @@ images/claude/bin/
 images/codex/bin/
 images/pi/bin/
 images/gemini/bin/
+
+# goreleaser snapshot output (untracked)
+dist/
