@@ -1,0 +1,18 @@
+schema_version: "1"
+description: "Planner T3 - superpowers framework: design + detailed plan; escalates taste/ethics/reversibility"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
+image: local/darkish-claude:latest
+model: claude-opus-4-7
+max_turns: 50
+max_duration: "2h"
+detached: false
+skills:
+  - danmestas/agent-skills/skills/hipp
+  - danmestas/agent-skills/skills/ousterhout
+  - danmestas/agent-skills/skills/superpowers
+volumes:
+  - source: ./.scion/skills-staging/planner-t3/
+    target: /home/scion/skills/role/
+    read_only: true
