@@ -4,6 +4,40 @@ Per-harness-class container images that extend Scion's runtime images with
 the Darkish Factory's tool baseline, folder-trust prelude, and credential
 mounting hooks.
 
+## Universal baseline
+
+Every `darkish-*` image carries the same baseline regardless of backend:
+
+| Layer | Contents | Notes |
+|---|---|---|
+| apt utilities | `jq`, `ripgrep`, `fzf`, `less`, `gh`, `ca-certificates`, `curl`, `git` | Standard tools every harness uses |
+| bones binaries | `agent-init`, `agent-tasks` | Pre-compiled on the host (`make prebuild-bones`) and copied from `<backend>/bin/`. agent-infra is currently private; in-Docker `git clone` blocked until it goes public. The other 12 bones names from the spec (assert, autoclaim, chat, etc.) are not yet in the upstream agent-infra repo. |
+| Universal skill | `caveman` (cloned from `juliusbrussee/caveman`) | Communication-tier discipline; mounted at `/home/scion/skills/caveman/` |
+| Universal MCP | `context-mode` (npm `@mksglu/context-mode` with git-clone fallback to `mksglu/context-mode`) | Sandboxed raw-output handling; every harness faces context-window pressure |
+| Trust prelude | per-backend (validated for claude + codex; placeholders for pi + gemini) | Suppresses first-encounter trust dialogs |
+
+`mgrep` was specified in the original plan but is intentionally omitted —
+it is a paid product. Code search is handled by `context-mode` instead.
+
+### Refresh procedure
+
+```bash
+make -C images prebuild-bones    # rebuild bones binaries from ~/projects/agent-infra
+make -C images all               # rebuild all four darkish-* images
+```
+
+For fast iteration on tool layers only:
+
+```bash
+make -C images tools-only-all
+```
+
+For prelude-script changes only:
+
+```bash
+make -C images prelude-only-claude   # or codex / pi / gemini
+```
+
 ## Layout
 
 ```
