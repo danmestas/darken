@@ -21,7 +21,7 @@ func findRepoRoot() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("not in a git repo: %w", err)
 	}
-	return strings.TrimRight(string(out), "\n"), nil
+	return strings.TrimRight(string(out), "\r\n"), nil
 }
 
 // imageExists reports whether a docker image is present locally.
