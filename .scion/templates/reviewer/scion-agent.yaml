@@ -1,12 +1,12 @@
 schema_version: "1"
-description: "Reviewer - senior-engineer disposition; enforces the constitution; can block before anything reaches the operator"
+description: "Reviewer - senior-engineer block-or-ship; cross-vendor second opinion vs claude implementer"
 agent_instructions: agents.md
 system_prompt: system-prompt.md
-default_harness_config: claude
-image: local/darkish-claude:latest
-model: claude-opus-4-7
+default_harness_config: codex
+image: local/darkish-codex:latest
+model: gpt-5.5
 max_turns: 30
-max_duration: "30m"
+max_duration: "1h"
 detached: false
 skills:
   - danmestas/agent-skills/skills/ousterhout
