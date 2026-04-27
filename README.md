@@ -6,6 +6,57 @@ By Daniel Mestas
 
 Run multiple Claude Code instances in parallel, building at least 4x the work at the same time, bother the operator half as much, with deterministic guarantees, observability, and evolution over time. The human stays in the loop only for taste, architecture, ethics, and reversibility. For work with machine-checkable correctness — formal specs, reference binaries, tunable objectives — the same architecture runs fully dark. See §11.
 
+## Install
+
+```bash
+# Recommended (Homebrew):
+brew install danmestas/tap/darken
+
+# Alternative (Go modules):
+go install github.com/danmestas/darken/cmd/darken@latest
+
+# Direct download:
+# https://github.com/danmestas/darken/releases/latest
+```
+
+The `darken` binary is self-contained — templates, scripts, Dockerfiles, and the host-mode skills are embedded. Workers spawn as containerized subharnesses (claude / codex / pi / gemini); see §5 for the roster. You'll need Docker, [scion](https://github.com/ptone/scion), and credentials for whichever backends you use (`darken creds` populates them from your local Keychain / `~/.codex/auth.json` / env vars).
+
+## Quick start — orchestrator mode in a fresh repo
+
+```bash
+# In any repo you want to drive with the §7 pipeline:
+cd ~/projects/some-other-repo
+
+# One-time setup
+darken init                                       # scaffolds CLAUDE.md
+darken creds                                      # push hub secrets
+darken bootstrap                                  # stage skills, ensure images
+
+# Open Claude Code; CLAUDE.md auto-loads orchestrator-mode skill
+claude code
+
+# In the session, give it a task:
+# > "Audit the auth flow for compliance gaps"
+# Orchestrator routes (light/heavy), dispatches subharnesses,
+# echoes decisions, pauses only when the escalation classifier fires.
+```
+
+`darken doctor` runs preflight + per-harness checks. `darken doctor <role>` shows which substrate layer (override / project / embedded) served that role's manifest.
+
+### Customizing the substrate
+
+The embedded substrate is the always-present fallback. Override per-machine in `~/.config/darken/overrides/`, per-project in `<repo>/.scion/templates/<role>/`, or per-invocation via `darken --substrate-overrides <path>`. Run `darken create-harness <name> --backend codex --model gpt-5.5 ...` to scaffold a new role into your overrides.
+
+### Updating
+
+```bash
+brew upgrade darken
+# or:
+go install github.com/danmestas/darken/cmd/darken@latest
+```
+
+`darken version` reports the binary version + a 12-char prefix of the embedded substrate hash. Operators on the same release tag should see the same substrate hash; divergence indicates a local build.
+
 ## 1. Problem
 
 In spec-kit-style sessions, the AI surfaces multiple decisions per feature and the operator ratifies most without changing the recommendation. The AI isn't asking because it needs a human; it's asking because the harness was configured to ask.
