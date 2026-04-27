@@ -8,3 +8,9 @@ model: claude-opus-4-7
 max_turns: 30
 max_duration: "30m"
 detached: false
+skills:
+  - danmestas/agent-skills/skills/hipp
+volumes:
+  - source: ./.scion/skills-staging/planner/
+    target: /home/scion/skills/role/
+    read_only: true

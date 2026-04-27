@@ -8,3 +8,9 @@ model: claude-opus-4-7
 max_turns: 200
 max_duration: "4h"
 detached: false
+skills:
+  - danmestas/agent-skills/skills/dx-audit
+volumes:
+  - source: ./.scion/skills-staging/orchestrator/
+    target: /home/scion/skills/role/
+    read_only: true

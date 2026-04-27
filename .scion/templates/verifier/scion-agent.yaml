@@ -8,3 +8,9 @@ model: claude-sonnet-4-6
 max_turns: 50
 max_duration: "1h"
 detached: false
+skills:
+  - danmestas/agent-skills/skills/tigerstyle
+volumes:
+  - source: ./.scion/skills-staging/verifier/
+    target: /home/scion/skills/role/
+    read_only: true
