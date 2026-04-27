@@ -1,0 +1,29 @@
+# {{.RepoName}} — Darkish Factory orchestrator mode
+
+This repo is initialized for the Darkish Factory orchestration substrate.
+By default, Claude Code in this repo operates as **the orchestrator** for
+the §7 pipeline running against this working repo.
+
+**On session start, invoke the `orchestrator-mode` skill** to load the
+full §7 loop, role roster, escalation classifier, and host-mode protocol.
+Workers spawn as containerized subharnesses via `darken spawn`; their
+worktrees live under `.scion/agents/<name>/workspace/` here.
+
+## Quick reference
+
+```bash
+darken doctor              # preflight + per-harness checks
+darken spawn r1 --type researcher "<task>"    # dispatch a worker
+darken list                # see live agents
+darken apply               # gate darwin recommendations (post-pipeline)
+```
+
+## Substrate
+
+The substrate (templates, scripts, Dockerfiles, the two host-mode skills)
+is embedded in `darken` itself. Override per-machine in
+`~/.config/darken/overrides/`, per-project in `.scion/templates/<role>/`,
+or per-invocation via `--substrate-overrides <path>`.
+
+Run `darken doctor <harness>` to see which substrate layer served any
+particular role.
