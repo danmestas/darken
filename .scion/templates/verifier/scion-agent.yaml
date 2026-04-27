@@ -1,12 +1,12 @@
 schema_version: "1"
-description: "Verifier - adversarial posture; runs tests, edges, fuzzing; failures loop back up to N times before escalating"
+description: "Verifier - adversarial test execution + fuzzing; long-running"
 agent_instructions: agents.md
 system_prompt: system-prompt.md
-default_harness_config: claude
-image: local/darkish-claude:latest
-model: claude-sonnet-4-6
+default_harness_config: codex
+image: local/darkish-codex:latest
+model: gpt-5.5
 max_turns: 50
-max_duration: "1h"
+max_duration: "2h"
 detached: false
 skills:
   - danmestas/agent-skills/skills/tigerstyle
