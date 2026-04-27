@@ -114,8 +114,23 @@ images/
 
 ## Build
 
-First-time setup needs `local/scion-claude:latest` already built (see
-`~/projects/scion/image-build/scripts/build-images.sh`).
+First-time setup needs:
+
+1. `local/scion-claude:latest` already built (see
+   `~/projects/scion/image-build/scripts/build-images.sh`).
+2. Bones binaries pre-built on the host. The `images/*/bin/` dirs are
+   git-ignored — agent-infra is private, so the binaries can't be
+   `git clone`'d inside the Docker build context. Operator runs:
+
+   ```bash
+   make -C images prebuild-bones
+   ```
+
+   This cross-compiles `agent-init` and `agent-tasks` for `linux/arm64`
+   from `~/projects/agent-infra` into all four `images/<backend>/bin/`
+   directories. Re-run after `agent-infra` updates.
+
+Then:
 
 ```bash
 make -C images claude
