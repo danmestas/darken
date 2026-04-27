@@ -21,10 +21,12 @@ AGENT_INFRA_PATH ?= $(HOME)/projects/agent-infra
 # EdgeSync/leaf are private repos (no credentials in Docker build context).
 .PHONY: prebuild-bones
 prebuild-bones:
-	mkdir -p claude/bin
+	mkdir -p claude/bin codex/bin
 	cd $(AGENT_INFRA_PATH) && \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/agent-init ./cmd/agent-init && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/agent-tasks ./cmd/agent-tasks
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/agent-tasks ./cmd/agent-tasks && \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/codex/bin/agent-init ./cmd/agent-init && \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/codex/bin/agent-tasks ./cmd/agent-tasks
 
 .PHONY: claude
 claude:
