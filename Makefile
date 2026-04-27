@@ -1,7 +1,8 @@
+DARKEN_VERSION ?= dev
 .PHONY: darken
 darken:
 	mkdir -p bin
-	go build -trimpath -ldflags="-s -w" -o bin/darken ./cmd/darken
+	go build -trimpath -ldflags="-s -w -X main.version=$(DARKEN_VERSION)" -o bin/darken ./cmd/darken
 
 # Sync host-mode skills from the canonical agent-skills repo into the
 # project-local .claude/skills/ tree so Claude Code in this repo
