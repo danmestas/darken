@@ -1,6 +1,9 @@
 package main
 
-import "os"
+import (
+	"io"
+	"os"
+)
 
 // captureStdout runs fn with os.Stdout pointed at an in-memory pipe
 // and returns whatever fn wrote. Shared by every *_test.go in the
@@ -13,7 +16,6 @@ func captureStdout(fn func() error) (string, error) {
 	err := fn()
 	w.Close()
 	os.Stdout = old
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	return string(buf[:n]), err
+	body, _ := io.ReadAll(r)
+	return string(body), err
 }
