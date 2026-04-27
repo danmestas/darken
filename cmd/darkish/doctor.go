@@ -105,28 +105,36 @@ func checkImages() error {
 	return nil
 }
 
+// remediationFor returns the §9 failure-mode remediation hint for a
+// failed check. Dispatches on the structured check name, not the
+// error message, so a future error-string change can't silently break
+// the mapping.
 func remediationFor(check string, err error) string {
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "docker info"):
+	switch check {
+	case "docker daemon reachable":
 		return "start Docker Desktop / podman / colima"
-	case strings.Contains(msg, "scion not on PATH"):
+	case "scion CLI present":
 		return "make install in ~/projects/scion"
-	case strings.Contains(msg, "server not running"):
+	case "scion server status":
 		return "scion server start"
-	case strings.Contains(msg, "missing hub secret"):
-		return "scripts/stage-creds.sh all"
-	case strings.Contains(msg, "missing image"):
-		return "make -C images all"
-	case strings.Contains(msg, "skills-staging"):
-		return "Run `darkish skills <harness>`"
-	case strings.Contains(msg, "is a directory") || strings.Contains(msg, "directory symlink"):
-		return "Switch to copy-staging via `darkish skills <harness>` (never use directory symlinks)"
-	case strings.Contains(msg, "caveman tier mismatch"):
-		return "Update <harness>/system-prompt.md Communication section; flag to darwin"
-	default:
-		return "see spec §9 failure modes"
+	case "hub secrets present", "secret":
+		return "scripts/stage-creds.sh"
+	case "darkish images built", "image":
+		return "make -C images"
+	case "staging", "staging-mismatch":
+		return "darkish skills <harness>"
 	}
+	// Fallback for callers passing free-form check names.
+	if err != nil {
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "is a directory") || strings.Contains(msg, "directory symlink"):
+			return "Switch to copy-staging via `darkish skills <harness>` (never use directory symlinks)"
+		case strings.Contains(msg, "caveman tier mismatch"):
+			return "Update <harness>/system-prompt.md Communication section; flag to darwin"
+		}
+	}
+	return "see spec §9 failure modes"
 }
 
 func doctorHarness(name string) (string, error) {
@@ -159,13 +167,18 @@ func doctorHarness(name string) (string, error) {
 		"claude": "claude_auth", "codex": "codex_auth",
 		"pi": "OPENROUTER_API_KEY", "gemini": "gemini_auth",
 	}[backend]
-	out, _ := exec.Command("scion", "hub", "secret", "list").CombinedOutput()
-	if !strings.Contains(string(out), wantSecret) {
-		fmt.Fprintf(&sb, "FAIL  hub secret %s missing — remediation: %s\n",
-			wantSecret, remediationFor("secret", fmt.Errorf("missing hub secret: %s", wantSecret)))
-		failed = append(failed, "secret")
+	if wantSecret == "" {
+		fmt.Fprintf(&sb, "FAIL  unknown backend %q in manifest\n", backend)
+		failed = append(failed, "backend")
 	} else {
-		fmt.Fprintf(&sb, "OK    hub secret %s present\n", wantSecret)
+		out, _ := exec.Command("scion", "hub", "secret", "list").CombinedOutput()
+		if !strings.Contains(string(out), wantSecret) {
+			fmt.Fprintf(&sb, "FAIL  hub secret %s missing — remediation: %s\n",
+				wantSecret, remediationFor("secret", fmt.Errorf("missing hub secret: %s", wantSecret)))
+			failed = append(failed, "secret")
+		} else {
+			fmt.Fprintf(&sb, "OK    hub secret %s present\n", wantSecret)
+		}
 	}
 
 	stageDir := filepath.Join(root, ".scion", "skills-staging", name)
@@ -217,19 +230,43 @@ func postMortemFor(logPath string) string {
 	return sb.String()
 }
 
-// scanField reads a single YAML scalar field's value. Hand-rolled to
-// avoid dragging in a YAML dep per constitution §I.
+// scanField reads a single YAML scalar field's value from a manifest.
+//
+// Hand-rolled to avoid a YAML dep per constitution §I.
+//
+// Assumptions about the manifest shape:
+//   - top-level scalar (no nesting under another key)
+//   - no comments on the value line (no `field: value  # comment`)
+//   - no quoted scalars (no `"foo"` or `'foo'`)
+//   - no block scalars (no `|` or `>`)
+//
+// If a manifest field doesn't fit these assumptions, do not extend
+// this function — switch to `scion templates show <name> --local
+// --format json` instead.
 func scanField(body, prefix string) string {
 	for _, line := range strings.Split(body, "\n") {
 		t := strings.TrimSpace(line)
-		if strings.HasPrefix(t, prefix) {
-			return strings.TrimSpace(strings.TrimPrefix(t, prefix))
+		if v, ok := strings.CutPrefix(t, prefix); ok {
+			return strings.TrimSpace(v)
 		}
 	}
 	return ""
 }
 
 // scanList reads a YAML block sequence under a given header.
+//
+// Hand-rolled to avoid a YAML dep per constitution §I.
+//
+// Assumptions about the manifest shape:
+//   - only single-level block sequence under the header
+//   - assumes 2-space indentation
+//   - terminates on first non-indented line OR blank line
+//   - does not handle nested lists, flow-style sequences, or
+//     list-on-same-line as header (no `header: [a, b]`)
+//
+// If a manifest list doesn't fit these assumptions, do not extend
+// this function — switch to `scion templates show <name> --local
+// --format json` instead.
 func scanList(body, header string) []string {
 	var out []string
 	in := false
@@ -242,8 +279,8 @@ func scanList(body, header string) []string {
 		if !in {
 			continue
 		}
-		if strings.HasPrefix(t, "- ") {
-			out = append(out, strings.TrimSpace(strings.TrimPrefix(t, "- ")))
+		if v, ok := strings.CutPrefix(t, "- "); ok {
+			out = append(out, strings.TrimSpace(v))
 			continue
 		}
 		if t == "" || !strings.HasPrefix(line, "  ") {

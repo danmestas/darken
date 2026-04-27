@@ -27,6 +27,13 @@ func TestDoctorReportsMissingScion(t *testing.T) {
 func TestDoctorHarnessChecksImageSecretAndStaging(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DARKISH_REPO_ROOT", dir)
+
+	// Plant stubs so the test doesn't depend on the dev box's real docker / scion state.
+	stubDir := t.TempDir()
+	os.WriteFile(filepath.Join(stubDir, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	os.WriteFile(filepath.Join(stubDir, "scion"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", stubDir)
+
 	hd := filepath.Join(dir, ".scion", "templates", "sme")
 	os.MkdirAll(hd, 0o755)
 	os.WriteFile(filepath.Join(hd, "scion-agent.yaml"),
