@@ -1,7 +1,7 @@
-.PHONY: darkish
-darkish:
+.PHONY: darken
+darken:
 	mkdir -p bin
-	go build -trimpath -ldflags="-s -w" -o bin/darkish ./cmd/darkish
+	go build -trimpath -ldflags="-s -w" -o bin/darken ./cmd/darken
 
 # Sync host-mode skills from the canonical agent-skills repo into the
 # project-local .claude/skills/ tree so Claude Code in this repo

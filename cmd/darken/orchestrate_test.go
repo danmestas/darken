@@ -9,7 +9,7 @@ import (
 
 func TestOrchestratePrintsLocalSkill(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("DARKISH_REPO_ROOT", tmp)
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
 
 	dir := filepath.Join(tmp, ".claude", "skills", "orchestrator-mode")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

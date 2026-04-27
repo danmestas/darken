@@ -210,7 +210,7 @@ Source of truth: `.design/pipeline-mechanics.md` §9 and the spec at `docs/super
 
 After pipeline completion, `darwin` runs (codex / gpt-5.5, 50 turns / 4h, not detached) over the audit log and transcripts. It writes structured recommendations to `.scion/darwin-recommendations/<date>-<run-id>.yaml` (recommendation types: `skill_add`, `skill_remove`, `skill_upgrade`, `model_swap`, `prompt_edit`, `rule_add`).
 
-Darwin never mutates state directly. The operator reviews recommendations via `darkish apply <file>` (`y/n/skip/edit` per recommendation); approved recommendations mutate manifests, commit the change in git, and are recorded in the audit log. Surface darwin's recommendations to the operator at completion time alongside the reviewable diff and any deferred escalations.
+Darwin never mutates state directly. The operator reviews recommendations via `darken apply <file>` (`y/n/skip/edit` per recommendation); approved recommendations mutate manifests, commit the change in git, and are recorded in the audit log. Surface darwin's recommendations to the operator at completion time alongside the reviewable diff and any deferred escalations.
 
 See `.design/pipeline-mechanics.md` §10 and spec §12.4.
 

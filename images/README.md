@@ -76,7 +76,7 @@ for the full §3.1 matrix).
 `planner-t1` through `planner-t4` are the four planner tiers (haiku
 ad-hoc → sonnet claude-code → opus superpowers → codex spec-kit).
 `darwin` is the post-pipeline evolution agent that emits YAML
-recommendations gated by `darkish apply`.
+recommendations gated by `darken apply`.
 
 ## Layout
 

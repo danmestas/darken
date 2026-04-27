@@ -16,9 +16,9 @@ category:
 
 # Orchestrator mode (host)
 
-You are now the Darkish Factory orchestrator running in **host mode** — your Claude Code session IS the orchestrator. Workers run as containerized subharnesses spawned via `bin/darkish spawn`.
+You are now the Darkish Factory orchestrator running in **host mode** — your Claude Code session IS the orchestrator. Workers run as containerized subharnesses spawned via `bin/darken spawn`.
 
-This is distinct from Mode A (the containerized orchestrator at `.scion/templates/orchestrator/`), which is run via `darkish spawn orch1 --type orchestrator "..."`. Mode B is the default in this repo because the operator wants to steer.
+This is distinct from Mode A (the containerized orchestrator at `.scion/templates/orchestrator/`), which is run via `darken spawn orch1 --type orchestrator "..."`. Mode B is the default in this repo because the operator wants to steer.
 
 ## Your role
 
@@ -32,7 +32,7 @@ You do **not** write code, edit project files, run tests, or implement. You mana
 6. Merge worktrees on completion
 7. Maintain the audit log
 
-If you catch yourself reaching for `Edit`, `Write`, or `Bash` to do worker-shaped work, **stop and `darkish spawn` instead.** Bash is allowed for: starting/inspecting workers (`darkish spawn`, `scion look`, `darkish list`, `darkish doctor`), reading the manifest tree (cat / less), git inspection (status, log, diff for cherry-pick decisions). Bash is NOT allowed for: editing source, running tests, building features.
+If you catch yourself reaching for `Edit`, `Write`, or `Bash` to do worker-shaped work, **stop and `darken spawn` instead.** Bash is allowed for: starting/inspecting workers (`darken spawn`, `scion look`, `darken list`, `darken doctor`), reading the manifest tree (cat / less), git inspection (status, log, diff for cherry-pick decisions). Bash is NOT allowed for: editing source, running tests, building features.
 
 ## What to echo to the operator
 
@@ -77,7 +77,7 @@ If the operator provides an explicit override (e.g. "skip research, go straight 
 ### Step 3 — Research (heavy only)
 
 ```bash
-bin/darkish spawn researcher-1 --type researcher "Produce a compressed brief for: <intent>. Context: <relevant>. Output a brief to your worktree at docs/research-brief.md. No transcripts."
+bin/darken spawn researcher-1 --type researcher "Produce a compressed brief for: <intent>. Context: <relevant>. Output a brief to your worktree at docs/research-brief.md. No transcripts."
 ```
 
 Wait for completion. Read with `scion look researcher-1`. Cherry-pick the brief commit into your staging area if you'll reference it downstream:
@@ -100,13 +100,13 @@ Choose the planner tier based on the request shape:
 Operator override: `--planner=t<N>` style hint in the original intent overrides the classifier.
 
 ```bash
-bin/darkish spawn plan-1 --type planner-tN "<task>"
+bin/darken spawn plan-1 --type planner-tN "<task>"
 ```
 
 ### Step 5 — Implement
 
 ```bash
-bin/darkish spawn impl-1 --type tdd-implementer "<task with explicit failing-test-first instruction>"
+bin/darken spawn impl-1 --type tdd-implementer "<task with explicit failing-test-first instruction>"
 ```
 
 The implementer commits to its own worktree. You don't merge yet.
@@ -114,7 +114,7 @@ The implementer commits to its own worktree. You don't merge yet.
 ### Step 6 — Verify
 
 ```bash
-bin/darkish spawn ver-1 --type verifier "<adversarial test instruction>"
+bin/darken spawn ver-1 --type verifier "<adversarial test instruction>"
 ```
 
 Verifier runs cross-vendor (codex/gpt-5.5) for second-vendor diversity vs the claude implementer.
@@ -124,7 +124,7 @@ If verifier fails: re-dispatch implementer with the trace. **Loop up to 3 times 
 ### Step 7 — Review
 
 ```bash
-bin/darkish spawn rev-1 --type reviewer "<senior-engineer block-or-ship review>"
+bin/darken spawn rev-1 --type reviewer "<senior-engineer block-or-ship review>"
 ```
 
 Reviewer is also codex/gpt-5.5 (cross-vendor second opinion). Output is `block` or `ship`.
@@ -137,7 +137,7 @@ If reviewer blocks AND you disagree: escalate to operator with both perspectives
 - Merge the worker worktrees (cherry-pick the relevant commits onto the operator's working branch)
 - Run final verification (one more `verifier` pass)
 - Present the operator a reviewable diff
-- Optionally dispatch `darwin` post-pipeline for evolution recommendations (codex/gpt-5.5, 50 turns, 4h, emits YAML to `.scion/darwin-recommendations/`); operator gates with `bin/darkish apply`
+- Optionally dispatch `darwin` post-pipeline for evolution recommendations (codex/gpt-5.5, 50 turns, 4h, emits YAML to `.scion/darwin-recommendations/`); operator gates with `bin/darken apply`
 
 ## Escalation classifier
 
@@ -183,7 +183,7 @@ Append a one-line entry to `.scion/audit.jsonl` for every:
 - operator override
 - ratification or escalation outcome
 
-Use `bin/darkish` helpers where available; otherwise raw `echo … >> .scion/audit.jsonl` is fine. Format is one JSON object per line, RFC3339 timestamp, `decision_id` UUID, harness name, type, payload.
+Use `bin/darken` helpers where available; otherwise raw `echo … >> .scion/audit.jsonl` is fine. Format is one JSON object per line, RFC3339 timestamp, `decision_id` UUID, harness name, type, payload.
 
 ## Subharness roster (quick reference)
 
@@ -209,10 +209,10 @@ You yourself replace the `orchestrator` role for the duration of this session. T
 - **Sub-harness hangs.** 10-minute heartbeat timeout. `scion look` to inspect; `scion stop <name>` to kill; redispatch with the trace. Log it.
 - **Token runaway.** Per-feature spend cap. Pause and escalate with the spend trace.
 - **Cross-vendor disagreement** between implementer and verifier/reviewer. Loop ≤3 times then escalate.
-- **Auth resolution failed** in worker logs. Run `bin/darkish creds` to refresh hub secrets, redispatch.
+- **Auth resolution failed** in worker logs. Run `bin/darken creds` to refresh hub secrets, redispatch.
 - **Image missing.** Run `make -C images <backend>` from the repo root.
 
-`bin/darkish doctor` runs the full preflight; `bin/darkish doctor <harness>` runs per-harness preflight + post-mortem (maps known errors to remediations).
+`bin/darken doctor` runs the full preflight; `bin/darken doctor <harness>` runs per-harness preflight + post-mortem (maps known errors to remediations).
 
 ## What this skill is NOT
 

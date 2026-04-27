@@ -1,11 +1,18 @@
-// Package main is the darkish operator CLI.
+// Package main is the darken operator CLI.
 package main
 
 import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/danmestas/darkish-factory/internal/substrate"
 )
+
+var globalFlags struct {
+	substrateOverrides string
+}
 
 type subcommand struct {
 	name string
@@ -34,10 +41,16 @@ func main() {
 			os.Exit(0)
 		}
 	}
-	flag.Usage = printUsage
-	flag.Parse()
 
-	args := flag.Args()
+	fs := flag.NewFlagSet("darken", flag.ContinueOnError)
+	fs.StringVar(&globalFlags.substrateOverrides, "substrate-overrides", "",
+		"path to substrate override directory (overrides $DARKEN_SUBSTRATE_OVERRIDES and ~/.config/darken/overrides/)")
+	fs.Usage = printUsage
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		os.Exit(2)
+	}
+
+	args := fs.Args()
 	if len(args) == 0 {
 		printUsage()
 		os.Exit(2)
@@ -46,23 +59,40 @@ func main() {
 	for _, sc := range subcommands {
 		if sc.name == args[0] {
 			if err := sc.run(args[1:]); err != nil {
-				fmt.Fprintln(os.Stderr, "darkish:", err)
+				fmt.Fprintln(os.Stderr, "darken:", err)
 				os.Exit(1)
 			}
 			return
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "darkish: unknown subcommand %q\n", args[0])
+	fmt.Fprintf(os.Stderr, "darken: unknown subcommand %q\n", args[0])
 	printUsage()
 	os.Exit(2)
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: darkish <subcommand> [flags] [args]")
+	fmt.Fprintln(os.Stderr, "Usage: darken <subcommand> [flags] [args]")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	for _, sc := range subcommands {
 		fmt.Fprintf(os.Stderr, "  %-16s %s\n", sc.name, sc.desc)
 	}
+}
+
+// substrateResolver builds a *substrate.Resolver from globalFlags +
+// the user's home dir + the project root (best-effort). Subcommands
+// call this on demand rather than caching a singleton, so per-test
+// env-var changes flow through.
+func substrateResolver() *substrate.Resolver {
+	cfg := substrate.Config{
+		FlagOverride: globalFlags.substrateOverrides,
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		cfg.UserOverrideDir = filepath.Join(home, ".config", "darken", "overrides")
+	}
+	if root, err := repoRoot(); err == nil {
+		cfg.ProjectRoot = root
+	}
+	return substrate.New(cfg)
 }

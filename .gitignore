@@ -22,7 +22,7 @@
 # Per-harness staged skills (rebuilt on each spawn from manifest).
 .scion/skills-staging/
 
-# Darwin recommendation YAML emitted post-pipeline (operator decides via `darkish apply`).
+# Darwin recommendation YAML emitted post-pipeline (operator decides via `darken apply`).
 .scion/darwin-recommendations/
 
 # Built Go binaries
