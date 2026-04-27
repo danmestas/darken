@@ -27,3 +27,11 @@
 
 # Built Go binaries
 /bin/
+
+# Pre-built bones binaries (regenerable via `make -C images prebuild-bones`).
+# Too large to commit (~55MB each × 4 backends = 220MB). Operator must run
+# prebuild-bones before `make claude` / `make all`.
+images/claude/bin/
+images/codex/bin/
+images/pi/bin/
+images/gemini/bin/
