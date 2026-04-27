@@ -38,6 +38,29 @@ For prelude-script changes only:
 make -C images prelude-only-claude   # or codex / pi / gemini
 ```
 
+## Auth model: hub-secrets-everywhere
+
+Every backend's auth flows through scion's hub secret store. No
+`volumes:` blocks for credentials in any harness manifest. Refresh
+secrets after token rotation by re-running `scripts/stage-creds.sh`.
+
+| Backend | Source | Hub secret name | Container target |
+|---|---|---|---|
+| claude | macOS Keychain `Claude Code-credentials` | `claude_auth` | `/home/scion/.claude/.credentials.json` |
+| codex | `~/.codex/auth.json` | `codex_auth` | `/home/scion/.codex/auth.json` |
+| pi | `OPENROUTER_API_KEY` env var | `OPENROUTER_API_KEY` | (env, inherited by container) |
+| gemini | `GEMINI_API_KEY` env var or `~/.gemini/oauth_creds.json` | `GEMINI_API_KEY` or `gemini_auth` | env or `/home/scion/.gemini/oauth_creds.json` |
+
+Refresh:
+
+```bash
+scripts/stage-creds.sh         # all four backends
+scripts/stage-creds.sh claude  # one backend
+```
+
+`stage-creds.sh` soft-fails per backend so partial environments still
+stage what they have.
+
 ## Layout
 
 ```
@@ -96,21 +119,27 @@ harnesses pull from there on first run.
 
 ## Wiring into harness manifests
 
-Each `.scion/templates/<harness>/scion-agent.yaml` sets the image and (for
-OAuth-using harnesses) mounts the staged credentials file:
+Each `.scion/templates/<harness>/scion-agent.yaml` declares its image and
+backend; auth comes from hub secrets, not from a `volumes:` block:
 
 ```yaml
+schema_version: "1"
+description: "..."
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
 image: local/darkish-claude:latest
-volumes:
-  - host: ~/.scion-credentials/claude/.credentials.json
-    container: /home/scion/.claude/.credentials.json
-    readonly: true
-env:
-  # Optional overrides; the prelude prefers OAuth file over env vars.
+model: claude-sonnet-4-6
+max_turns: 30
+max_duration: "1h"
+detached: false
 ```
 
-The host-side credential file is staged from the macOS Keychain by
-`scripts/stage-creds.sh` — see that script for details.
+Auth flows through scion's hub secret store: `scripts/stage-creds.sh`
+extracts the operator's credentials from macOS Keychain (claude),
+`~/.codex/auth.json` (codex), or env vars (pi, gemini) and pushes each
+as a hub secret. The broker projects them into the container at the
+canonical path each CLI expects.
 
 ## Codex
 
@@ -127,40 +156,10 @@ Build:
 make -C images codex
 ```
 
-**Mount the OAuth file directly.** Codex stores OAuth at
-`~/.codex/auth.json`. Mount it into the container — no staging step
-needed (unlike Claude, whose creds live in the macOS Keychain). Each
-codex-using harness's `scion-agent.yaml` sets:
-
-```yaml
-default_harness_config: codex
-image: local/darkish-codex:latest
-volumes:
-  - source: ~/.codex/auth.json
-    target: /home/scion/.codex/auth.json
-    read_only: true
-```
-
-**Use `scion --no-hub start` for codex agents (or push auth as a hub
-secret).** Scion's hub-mediated start does not auto-detect
-`~/.codex/auth.json` from the broker host — it expects the file to be
-pushed as a hub secret. Two paths:
-
-1. Local-only mode (simplest for solo dev):
-   ```bash
-   scion --no-hub start <agent-name>
-   ```
-   Scion auto-detects the file from `${HOME}/.codex/auth.json` on the
-   broker host and treats it as the codex auth source. Verified working.
-
-2. Hub-mode with explicit secret push:
-   ```bash
-   scion hub secret set --type file --target ~/.codex/auth.json --source ~/.codex/auth.json
-   ```
-   Then `scion start <agent-name> --harness-auth auth-file` works in
-   hub mode.
-
-The local-only path is what `scripts/spawn.sh` uses by default for codex.
+**Codex auth flows through `codex_auth` hub secret.** The operator's
+`~/.codex/auth.json` is pushed as a hub file secret targeting
+`/home/scion/.codex/auth.json` via `scripts/stage-creds.sh codex`. No
+`volumes:` block needed in the harness manifest.
 
 **Trust state.** Codex tracks per-project trust in `~/.codex/config.toml`
 as `[projects."<absolute-path>"] trust_level = "trusted"`. The codex
