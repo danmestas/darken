@@ -243,3 +243,49 @@ This document is the operational runbook for the §7 loop. It is not:
 - **The harness configurations.** For model, max\_turns, max\_duration, detached status, and description of each harness, read `.design/harness-roster.md` and the individual `.scion/templates/*/scion-agent.yaml` files.
 - **Feature specs.** When the factory is used to ship features, specs live in `.design/specs/<date>-<feature>.md`. That directory does not exist yet and will be created when the first feature is specced.
 - **The orchestrator's system prompt or agent instructions.** Those live in `.scion/templates/orchestrator/system-prompt.md` and `agents.md`. The operational specifics in this document were lifted from `agents.md`; as this document matures, `agents.md` can shrink to a reference to this file for the detail and retain only the executable command patterns the orchestrator needs inline. TODO: once this document stabilizes, audit `agents.md` for content that duplicates what is here and remove the duplication.
+
+---
+
+## 9. Planner Tier Routing
+
+The original §7 loop dispatched a single `planner` harness. The roster now has four planner tiers (`planner-t1`..`planner-t4`); the routing classifier in Phase 1 picks one. Source of truth is the spec at `docs/superpowers/specs/2026-04-26-harness-and-image-configuration-design.md` §8.
+
+The classifier's output extends from `light | heavy | ambiguous` to a tier label `t1..t4`. The light/heavy distinction collapses into the tier spectrum.
+
+| Classification signals | Tier | Harness | When to pick |
+|---|---|---|---|
+| Tiny ad-hoc; single-file change; obvious fix; no spec needed; no architectural decisions | `t1` | `planner-t1` (claude-haiku) | Thin planner — think-then-do; no plan doc; small bug fixes |
+| Mid-complexity; multi-file but bounded; follows established patterns; no constitution gates | `t2` | `planner-t2` (claude-sonnet) | Claude-code conventions; light plan doc; few clarifying questions |
+| Architectural decisions; new feature surface; needs design discipline; brainstorming → spec → plan → tasks | `t3` | `planner-t3` (claude-opus + superpowers) | Full superpowers TDD plan; default for ambiguous routing |
+| Constitution gates matter; cross-vendor planner pass desired; formal spec-kit workflow; highest rigor | `t4` | `planner-t4` (codex spec-kit) | Constitution-driven; full ratification: constitution + spec.md + plan.md + tasks/ |
+| `ambiguous` | `t3` | `planner-t3` | Default fallback — most cases benefit from design discipline; t4 is reserved for "we know we need a spec" |
+
+The operator can override at dispatch with `--planner=t<N>`. Overrides are logged to the audit log as classifier overrides (same shape as the existing routing override path).
+
+Phase 4 ("Plan") in §2 above runs whichever planner tier the classifier picked. The handoff convention (cherry-pick the output, stop and delete before starting the implementer) is unchanged across tiers. Planner-tier output may be `docs/plan.md` (t2/t3), the full spec-kit tree under `specs/` and `plans/` (t4), or no plan doc at all (t1, where the implementer receives the intent directly).
+
+---
+
+## 10. Darwin Loop
+
+`darwin` runs after pipeline completion. It is the post-pipeline evolution agent: codex-backed (gpt-5.5), 50 turns, 4h, not detached. It reads completed harness sessions (transcripts, audit log entries, metrics) and emits **structured recommendations** for the operator — never direct mutations.
+
+```
+pipeline run completes
+  → audit log + transcripts persisted
+  → darwin invoked over the run window
+  → darwin emits .scion/darwin-recommendations/<date>-<run-id>.yaml
+  → operator reviews via `darkish apply <file>` (y/n/skip/edit per recommendation)
+  → approved recommendations mutate the relevant manifest, commit the change in git, re-stage skills if needed
+  → ratifications recorded in the audit log
+```
+
+Recommendation types (spec §12.4): `skill_add`, `skill_remove`, `skill_upgrade`, `model_swap`, `prompt_edit`, `rule_add`. Each has a target harness, a one-paragraph rationale, evidence pointers (transcript lines / audit log entries / metrics), a confidence score, and a reversibility tag (`trivial | moderate | high`).
+
+`darwin` never mutates state directly. The mechanism is intentionally operator-gated:
+
+- The escalation classifier (taste / ethics / reversibility axes) runs against each recommendation. Trivial-reversibility recommendations may auto-apply if operator policy permits; everything else routes to operator review.
+- `darkish apply --dry-run <file>` prints what would change without modifying anything.
+- The audit log records every ratification (approved / skipped / edited), making the evolution loop replay-safe.
+
+This grounds darwin's "evolves rules and skills" loop in a concrete, auditable, operator-gated mechanism. The recommendations may add or remove skills, adjust tier defaults, swap models, edit system prompts, or tighten constitution clauses — but only the operator decides what lands.
