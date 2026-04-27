@@ -22,6 +22,7 @@ func runCreateHarness(args []string) error {
 	desc := fs.String("description", "", "one-sentence description")
 	maxTurns := fs.Int("max-turns", 50, "scion max_turns for the manifest")
 	axes := fs.String("axes", "(none)", "escalation-axis affinity (e.g. taste,reversibility)")
+	scope := fs.String("scope", "user", "where to scaffold: user|project")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -29,12 +30,25 @@ func runCreateHarness(args []string) error {
 	if *model == "" || *desc == "" {
 		return errors.New("--model and --description are required")
 	}
+	if *scope != "user" && *scope != "project" {
+		return fmt.Errorf("--scope must be user|project, got %q", *scope)
+	}
 
 	root, err := repoRoot()
 	if err != nil {
 		return err
 	}
-	dir := filepath.Join(root, ".scion", "templates", role)
+	var dir string
+	switch *scope {
+	case "user":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		dir = filepath.Join(home, ".config", "darken", "overrides", ".scion", "templates", role)
+	case "project":
+		dir = filepath.Join(root, ".scion", "templates", role)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}

@@ -219,12 +219,14 @@ func applyRec(r recommendation) error {
 
 func swapModel(root, harness, from, to string) error {
 	manifest := filepath.Join(root, ".scion", "templates", harness, "scion-agent.yaml")
-	body, err := os.ReadFile(manifest)
+	body, err := substrateResolver().ReadFile(".scion/templates/" + harness + "/scion-agent.yaml")
 	if err != nil {
 		return err
 	}
 	out := strings.Replace(string(body),
 		"model: "+from, "model: "+to, 1)
+	// Write back to the project-local manifest: model_swap mutates the
+	// working repo's substrate, never the embedded or override layers.
 	return os.WriteFile(manifest, []byte(out), 0o644)
 }
 
@@ -233,7 +235,7 @@ func swapModel(root, harness, from, to string) error {
 // is absent or non-unique.
 func editPrompt(root, harness, before, after string) error {
 	path := filepath.Join(root, ".scion", "templates", harness, "system-prompt.md")
-	body, err := os.ReadFile(path)
+	body, err := substrateResolver().ReadFile(".scion/templates/" + harness + "/system-prompt.md")
 	if err != nil {
 		return err
 	}
@@ -244,6 +246,8 @@ func editPrompt(root, harness, before, after string) error {
 		return fmt.Errorf("prompt_edit: before-string non-unique in %s", path)
 	}
 	out := strings.Replace(string(body), before, after, 1)
+	// Write back to the project-local prompt: prompt_edit mutates the
+	// working repo's substrate, never the embedded or override layers.
 	return os.WriteFile(path, []byte(out), 0o644)
 }
 
