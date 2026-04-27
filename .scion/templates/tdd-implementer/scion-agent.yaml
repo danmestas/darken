@@ -1,0 +1,17 @@
+schema_version: "1"
+description: "TDD implementer - writes a failing test first, then code; refuses production code without a failing test"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
+image: local/darkish-claude:latest
+model: claude-sonnet-4-6
+max_turns: 100
+max_duration: "2h"
+detached: false
+skills:
+  - danmestas/agent-skills/skills/idiomatic-go
+  - danmestas/agent-skills/skills/tigerstyle
+volumes:
+  - source: ./.scion/skills-staging/tdd-implementer/
+    target: /home/scion/skills/role/
+    read_only: true

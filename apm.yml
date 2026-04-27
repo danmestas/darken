@@ -1,0 +1,14 @@
+name: darkish-factory
+version: 0.1.0
+description: Darkish Factory pipeline - constitution-bound multi-agent software delivery on Scion
+target: claude
+dependencies:
+  apm:
+    - danmestas/agent-skills/skills/ousterhout
+    - danmestas/agent-skills/skills/hipp
+    - danmestas/agent-skills/skills/tigerstyle
+    - danmestas/agent-skills/skills/idiomatic-go
+    - danmestas/agent-skills/skills/norman
+    - danmestas/agent-skills/skills/dx-audit
+    - danmestas/agent-skills/skills/superpowers
+    - danmestas/agent-skills/skills/spec-kit

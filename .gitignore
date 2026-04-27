@@ -1,0 +1,37 @@
+# Scion runtime state — never commit
+.scion/runtime/
+.scion/cache/
+.scion/agents/
+
+# Container and grove state
+.scion/grove-state/
+.scion/worktrees/
+.scion/state.yaml
+.scion/server.log
+.scion/server.pid
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Per-harness staged skills (rebuilt on each spawn from manifest).
+.scion/skills-staging/
+
+# Darwin recommendation YAML emitted post-pipeline (operator decides via `darkish apply`).
+.scion/darwin-recommendations/
+
+# Built Go binaries
+/bin/
+
+# Pre-built bones binaries (regenerable via `make -C images prebuild-bones`).
+# Too large to commit (~55MB each × 4 backends = 220MB). Operator must run
+# prebuild-bones before `make claude` / `make all`.
+images/claude/bin/
+images/codex/bin/
+images/pi/bin/
+images/gemini/bin/
