@@ -1,0 +1,16 @@
+schema_version: "1"
+description: "Darwin - reads completed harness sessions; evolves rules and skills; long-context analysis"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: codex
+image: local/darkish-codex:latest
+model: gpt-5.5
+max_turns: 50
+max_duration: "4h"
+detached: false
+skills:
+  - danmestas/agent-skills/skills/dx-audit
+volumes:
+  - source: ./.scion/skills-staging/darwin/
+    target: /home/scion/skills/role/
+    read_only: true

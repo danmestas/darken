@@ -1,0 +1,18 @@
+schema_version: "1"
+description: "Planner T4 - spec-kit framework; full ratification: constitution + spec.md + plan.md + tasks/"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: codex
+image: local/darkish-codex:latest
+model: gpt-5.5
+max_turns: 100
+max_duration: "4h"
+detached: false
+skills:
+  - danmestas/agent-skills/skills/hipp
+  - danmestas/agent-skills/skills/ousterhout
+  - danmestas/agent-skills/skills/spec-kit
+volumes:
+  - source: ./.scion/skills-staging/planner-t4/
+    target: /home/scion/skills/role/
+    read_only: true

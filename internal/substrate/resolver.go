@@ -59,11 +59,19 @@ func New(cfg Config) *Resolver {
 	}
 }
 
+// embedSentinel marks resolver paths that live in EmbeddedFS rather
+// than the host filesystem. ReadFile / Open / Stat / Lookup detect
+// this prefix and route accordingly.
+const embedSentinel = "embed://"
+
 // ReadFile resolves name through the chain and returns the file contents.
 func (r *Resolver) ReadFile(name string) ([]byte, error) {
 	p, err := r.resolve(name)
 	if err != nil {
 		return nil, err
+	}
+	if rest, ok := strings.CutPrefix(p, embedSentinel); ok {
+		return fs.ReadFile(EmbeddedFS(), "data/"+rest)
 	}
 	return os.ReadFile(p)
 }
@@ -77,6 +85,9 @@ func (r *Resolver) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
+	if rest, ok := strings.CutPrefix(p, embedSentinel); ok {
+		return EmbeddedFS().Open("data/" + rest)
+	}
 	return os.Open(p)
 }
 
@@ -85,6 +96,9 @@ func (r *Resolver) Stat(name string) (fs.FileInfo, error) {
 	p, err := r.resolve(name)
 	if err != nil {
 		return nil, err
+	}
+	if rest, ok := strings.CutPrefix(p, embedSentinel); ok {
+		return fs.Stat(EmbeddedFS(), "data/"+rest)
 	}
 	return os.Stat(p)
 }
@@ -98,6 +112,9 @@ func (r *Resolver) Lookup(name string) (path, layer string, err error) {
 			return c.path, c.layer, nil
 		}
 	}
+	if _, err := fs.Stat(EmbeddedFS(), "data/"+name); err == nil {
+		return embedSentinel + name, "embedded", nil
+	}
 	return "", "", &MissError{Name: name}
 }
 
@@ -106,6 +123,10 @@ func (r *Resolver) resolve(name string) (string, error) {
 		if _, err := os.Stat(c.path); err == nil {
 			return c.path, nil
 		}
+	}
+	// Embedded fallback layer (always present).
+	if _, err := fs.Stat(EmbeddedFS(), "data/"+name); err == nil {
+		return embedSentinel + name, nil
 	}
 	return "", &MissError{Name: name}
 }

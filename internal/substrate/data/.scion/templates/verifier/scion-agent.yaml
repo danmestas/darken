@@ -1,0 +1,16 @@
+schema_version: "1"
+description: "Verifier - adversarial test execution + fuzzing; long-running"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: codex
+image: local/darkish-codex:latest
+model: gpt-5.5
+max_turns: 50
+max_duration: "2h"
+detached: false
+skills:
+  - danmestas/agent-skills/skills/tigerstyle
+volumes:
+  - source: ./.scion/skills-staging/verifier/
+    target: /home/scion/skills/role/
+    read_only: true

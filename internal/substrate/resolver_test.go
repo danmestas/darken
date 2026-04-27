@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,12 +74,17 @@ func TestResolver_EnvBeatsUserBeatsProject(t *testing.T) {
 func TestResolver_ProjectOnlyForTemplates(t *testing.T) {
 	tmp := t.TempDir()
 	projectDir := filepath.Join(tmp, "project")
-	mustWrite(t, filepath.Join(projectDir, "scripts", "stage-creds.sh"), "PROJECT")
+	// Use a path that's not part of the embedded substrate so the
+	// embedded fallback can't accidentally satisfy this lookup. The
+	// invariant under test is: project layer applies only to
+	// .scion/templates/* paths — a planted scripts/ file in the
+	// project root must NOT resolve.
+	mustWrite(t, filepath.Join(projectDir, "scripts", "not-an-embedded-script.sh"), "PROJECT")
 
 	r := New(Config{ProjectRoot: projectDir})
 
 	// Non-template files do NOT resolve from project root.
-	_, err := r.ReadFile("scripts/stage-creds.sh")
+	_, err := r.ReadFile("scripts/not-an-embedded-script.sh")
 	if err == nil {
 		t.Fatalf("expected miss for scripts/* in project root (templates-only), got hit")
 	}
@@ -86,12 +92,57 @@ func TestResolver_ProjectOnlyForTemplates(t *testing.T) {
 
 func TestResolver_MissesReturnMissError(t *testing.T) {
 	r := New(Config{})
-	_, err := r.ReadFile(".scion/templates/researcher/scion-agent.yaml")
+	_, err := r.ReadFile(".scion/templates/this-role-does-not-exist/scion-agent.yaml")
 	if err == nil {
 		t.Fatal("expected error on miss")
 	}
 	if !IsMiss(err) {
 		t.Fatalf("expected IsMiss(err)==true, got false (err=%v)", err)
+	}
+}
+
+func TestResolver_FallsThroughToEmbedded(t *testing.T) {
+	// No overrides set; Phase 1 would have returned MissError. Phase 2
+	// must fall through to the embedded substrate.
+	r := New(Config{})
+	body, err := r.ReadFile(".scion/templates/researcher/scion-agent.yaml")
+	if err != nil {
+		t.Fatalf("expected fallback to embedded; got error: %v", err)
+	}
+	if !strings.Contains(string(body), "default_harness_config:") {
+		t.Fatalf("embedded researcher manifest looks wrong (first 50 bytes): %q", string(body[:min(50, len(body))]))
+	}
+}
+
+func TestResolver_LookupReportsEmbeddedLayer(t *testing.T) {
+	r := New(Config{})
+	_, layer, err := r.Lookup(".scion/templates/researcher/scion-agent.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layer != "embedded" {
+		t.Fatalf("expected layer=embedded, got %q", layer)
+	}
+}
+
+func TestResolver_OverridesStillWinAgainstEmbedded(t *testing.T) {
+	tmp := t.TempDir()
+	userDir := filepath.Join(tmp, "user")
+	if err := os.MkdirAll(filepath.Join(userDir, ".scion", "templates", "researcher"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, ".scion", "templates", "researcher", "scion-agent.yaml"),
+		[]byte("USER_OVERRIDE"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := New(Config{UserOverrideDir: userDir})
+	body, err := r.ReadFile(".scion/templates/researcher/scion-agent.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "USER_OVERRIDE" {
+		t.Fatalf("expected USER_OVERRIDE to win against embedded; got %q", string(body))
 	}
 }
 

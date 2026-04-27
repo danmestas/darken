@@ -3,8 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/danmestas/darkish-factory/internal/substrate"
 )
 
 // runOrchestrate prints the host-mode orchestrator skill body to stdout.
@@ -14,6 +17,7 @@ import (
 // Lookup order:
 //  1. <repo>/.claude/skills/orchestrator-mode/SKILL.md (project copy)
 //  2. ~/projects/agent-skills/skills/orchestrator-mode/SKILL.md (canonical)
+//  3. embedded substrate (data/skills/orchestrator-mode/SKILL.md)
 func runOrchestrate(args []string) error {
 	if len(args) > 0 {
 		return errors.New("usage: darken orchestrate")
@@ -35,5 +39,12 @@ func runOrchestrate(args []string) error {
 		}
 	}
 
-	return fmt.Errorf("orchestrator skill not found in any of: %v", candidates)
+	// Phase 2 fallback: embedded
+	body, err := fs.ReadFile(substrate.EmbeddedFS(), "data/skills/orchestrator-mode/SKILL.md")
+	if err == nil {
+		_, err = os.Stdout.Write(body)
+		return err
+	}
+
+	return fmt.Errorf("orchestrator skill not found in project, agent-skills, or embedded substrate")
 }

@@ -1,0 +1,10 @@
+schema_version: "1"
+description: "Admin - append-only narrative chronicle of pipeline activity; observer-only, detached"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+default_harness_config: claude
+image: local/darkish-claude:latest
+model: claude-haiku-4-5-20251001
+max_turns: 100
+max_duration: "8h"
+detached: true

@@ -31,6 +31,8 @@ var subcommands = []subcommand{
 	{"images", "wrap make -C images", runImages},
 	{"list", "wrap scion list", runList},
 	{"orchestrate", "print host-mode orchestrator skill body", runOrchestrate},
+	{"init", "scaffold CLAUDE.md in a target dir", runInit},
+	{"version", "print binary version + embedded substrate hash", runVersion},
 }
 
 func main() {
