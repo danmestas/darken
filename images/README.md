@@ -61,6 +61,23 @@ scripts/stage-creds.sh claude  # one backend
 `stage-creds.sh` soft-fails per backend so partial environments still
 stage what they have.
 
+## Harness coverage
+
+Which backend image each role runs on (see `.design/harness-roster.md`
+for the full §3.1 matrix).
+
+| Image | Roles |
+|---|---|
+| `darkish-claude` | `orchestrator`, `researcher`, `designer`, `planner-t1`, `planner-t2`, `planner-t3`, `tdd-implementer`, `admin` |
+| `darkish-codex` | `planner-t4`, `verifier`, `reviewer`, `sme`, `darwin` |
+| `darkish-pi` | (override-only, no permanent harness) |
+| `darkish-gemini` | (override-only, no permanent harness) |
+
+`planner-t1` through `planner-t4` are the four planner tiers (haiku
+ad-hoc → sonnet claude-code → opus superpowers → codex spec-kit).
+`darwin` is the post-pipeline evolution agent that emits YAML
+recommendations gated by `darkish apply`.
+
 ## Layout
 
 ```
