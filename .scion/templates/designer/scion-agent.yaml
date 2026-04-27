@@ -8,7 +8,3 @@ model: claude-opus-4-7
 max_turns: 50
 max_duration: "1h"
 detached: false
-volumes:
-  - source: ~/.scion-credentials/claude/.credentials.json
-    target: /home/scion/.claude/.credentials.json
-    read_only: true
