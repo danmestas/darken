@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/danmestas/darkish-factory/internal/substrate"
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 func runInit(args []string) error {

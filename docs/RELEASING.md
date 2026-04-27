@@ -14,7 +14,7 @@ Operator runbook for cutting a `darken` release.
 
    ```bash
    echo "<paste-token>" | gh secret set HOMEBREW_TAP_GITHUB_TOKEN \
-     --repo danmestas/darkish-factory
+     --repo danmestas/darken
    ```
 
 3. **Verify the homebrew tap repo exists**:
@@ -54,7 +54,7 @@ The release workflow runs goreleaser, which:
 
 ```bash
 # go install
-go install github.com/danmestas/darkish-factory/cmd/darken@v0.1.0
+go install github.com/danmestas/darken/cmd/darken@v0.1.0
 darken version  # should print v0.1.0 + substrate hash
 
 # brew install
@@ -63,7 +63,7 @@ brew install danmestas/tap/darken
 darken version
 
 # direct download (e.g. for CI runners)
-curl -L https://github.com/danmestas/darkish-factory/releases/download/v0.1.0/darken_0.1.0_darwin_arm64.tar.gz \
+curl -L https://github.com/danmestas/darken/releases/download/v0.1.0/darken_0.1.0_darwin_arm64.tar.gz \
   -o darken.tar.gz
 tar -xzf darken.tar.gz
 ./darken version
@@ -72,7 +72,7 @@ tar -xzf darken.tar.gz
 ## Yanking a release (if something's broken)
 
 ```bash
-gh release delete v0.1.0 --repo danmestas/darkish-factory --yes
+gh release delete v0.1.0 --repo danmestas/darken --yes
 git push --delete origin v0.1.0
 git tag -d v0.1.0
 

@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/danmestas/darkish-factory/internal/substrate"
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 // runOrchestrate prints the host-mode orchestrator skill body to stdout.

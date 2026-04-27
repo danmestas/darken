@@ -526,7 +526,7 @@ func substrateResolver() *substrate.Resolver {
 }
 ```
 
-(Add the import for `github.com/danmestas/darkish-factory/internal/substrate` and `path/filepath`.)
+(Add the import for `github.com/danmestas/darken/internal/substrate` and `path/filepath`.)
 
 - [ ] **Step 2: Wire `darken doctor` to use the resolver for per-harness preflight**
 

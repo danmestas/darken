@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danmestas/darkish-factory/internal/substrate"
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 type check struct {
