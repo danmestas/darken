@@ -34,3 +34,20 @@ func TestOrchestrateRejectsArgs(t *testing.T) {
 		t.Fatal("expected error when args provided")
 	}
 }
+
+func TestOrchestrateFallsThroughToEmbedded(t *testing.T) {
+	// Set DARKEN_REPO_ROOT to a tmp dir with no project skill, AND
+	// HOME to a tmp dir with no agent-skills clone. Embedded fallback
+	// must serve the skill.
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+	t.Setenv("HOME", filepath.Join(tmp, "fakehome"))
+
+	out, err := captureStdout(func() error { return runOrchestrate(nil) })
+	if err != nil {
+		t.Fatalf("expected embedded fallback, got: %v", err)
+	}
+	if !strings.Contains(out, "Orchestrator mode") {
+		t.Fatalf("expected embedded skill body, got: %q", out)
+	}
+}
