@@ -15,7 +15,7 @@
 
 ARG BASE_IMAGE=local/scion-gemini:latest
 
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS final
 
 USER root
 

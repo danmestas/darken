@@ -12,7 +12,7 @@
 
 ARG BASE_IMAGE=local/scion-pi:latest
 
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS final
 
 USER root
 

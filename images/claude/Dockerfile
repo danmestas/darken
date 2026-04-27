@@ -17,7 +17,7 @@
 
 ARG BASE_IMAGE=local/scion-claude:latest
 
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS final
 
 USER root
 
