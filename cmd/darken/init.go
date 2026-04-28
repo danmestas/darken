@@ -82,10 +82,12 @@ func runInit(args []string) error {
 		}
 	}
 
-	// Persist the manifest after all artifacts are written.
-	// Task 3 lands writeInitManifest. For T2, comment out the call so the
-	// codebase compiles. Task 3 will uncomment + add the symbol.
-	// TODO(task-3): writeInitManifest(target, arts)
+	// Persist the manifest after all artifacts are written. Best-effort:
+	// a manifest write failure shouldn't abort init — uninstall will fall
+	// back to comparing against the binary's current Body() output.
+	if err := writeInitManifest(target, arts); err != nil {
+		fmt.Fprintf(os.Stderr, "init: manifest write failed: %v\n", err)
+	}
 
 	// bones init (unchanged)
 	if err := runBonesInit(target); err != nil {
