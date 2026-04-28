@@ -63,6 +63,11 @@ release:
 
 brews:
   - name: darken
+    # Modern Homebrew convention: formulae live in Formula/<name>.rb.
+    # Mixing root-level + Formula/ formulae in the same tap (we share
+    # danmestas/homebrew-tap with bones) confuses brew's name resolution
+    # and breaks `brew upgrade`.
+    directory: Formula
     repository:
       owner: danmestas
       name: homebrew-tap
