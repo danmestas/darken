@@ -33,6 +33,7 @@ var subcommands = []subcommand{
 	{"orchestrate", "print host-mode orchestrator skill body", runOrchestrate},
 	{"redispatch", "kill + re-spawn an agent with the same role", runRedispatch},
 	{"init", "scaffold CLAUDE.md in a target dir", runInit},
+	{"setup", "scaffold project + bring machine prereqs online (one-shot fresh-repo onboarding)", runSetup},
 	{"upgrade-init", "refresh project scaffolds against the binary's substrate, then verify", runUpgradeInit},
 	{"uninstall-init", "remove the project scaffolds darken init wrote (preserves customizations)", runUninstallInit},
 	{"version", "print binary version + embedded substrate hash", runVersion},
