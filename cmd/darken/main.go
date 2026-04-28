@@ -34,6 +34,7 @@ var subcommands = []subcommand{
 	{"init", "scaffold CLAUDE.md in a target dir", runInit},
 	{"version", "print binary version + embedded substrate hash", runVersion},
 	{"status", "print one-line status (statusLine-friendly)", runStatus},
+	{"dashboard", "open scion's web UI in the default browser", runDashboard},
 }
 
 func main() {
