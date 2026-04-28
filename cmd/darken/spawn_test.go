@@ -92,3 +92,28 @@ esac
 		t.Fatalf("scion list not invoked for ready-poll: %s", body)
 	}
 }
+
+func TestSpawn_WatchFlagPassesAttach(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls.log")
+
+	scionStub := `#!/bin/sh
+echo "$0 $@" >> ` + log + `
+case "$1" in
+  start) exit 0 ;;
+  list)  echo '[{"name":"smoke-watch","phase":"running"}]'; exit 0 ;;
+esac
+`
+	os.WriteFile(filepath.Join(dir, "scion"), []byte(scionStub), 0o755)
+	os.WriteFile(filepath.Join(dir, "bash"),
+		[]byte("#!/bin/sh\necho \"$0 $@\" >> "+log+"\ncat \"$1\" >> "+log+"\n"), 0o755)
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	if err := runSpawn([]string{"smoke-watch", "--type", "researcher", "--watch", "task..."}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	body, _ := os.ReadFile(log)
+	if !strings.Contains(string(body), "--attach") {
+		t.Fatalf("--watch should pass --attach to scion start: %s", body)
+	}
+}
