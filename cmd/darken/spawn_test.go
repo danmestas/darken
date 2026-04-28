@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSpawnInvokesStageThenScion(t *testing.T) {
@@ -12,9 +13,18 @@ func TestSpawnInvokesStageThenScion(t *testing.T) {
 	log := filepath.Join(dir, "calls.log")
 
 	// scion stub: log invocation args (used to assert `start smoke-1`).
+	// Also handle `list --format json` so the post-start poller sees
+	// phase=running and exits promptly. (Phase 7 Task 2 wires the poll
+	// after scion start; without the list branch the poller would
+	// fail to parse empty stdout and runSpawn would error.)
 	scionStub := filepath.Join(dir, "scion")
 	if err := os.WriteFile(scionStub, []byte(
-		"#!/bin/sh\necho \"$0 $@\" >> "+log+"\n"), 0o755); err != nil {
+		"#!/bin/sh\necho \"$0 $@\" >> "+log+"\n"+
+			"case \"$1\" in\n"+
+			"  start) exit 0 ;;\n"+
+			"  list)  echo '[{\"name\":\"smoke-1\",\"phase\":\"running\"}]'; exit 0 ;;\n"+
+			"  *)     exit 0 ;;\n"+
+			"esac\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// bash stub: log args + dump the script body. spawn now extracts
@@ -40,5 +50,70 @@ func TestSpawnInvokesStageThenScion(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "start smoke-1") {
 		t.Fatalf("scion start not invoked: %s", body)
+	}
+}
+
+func TestSpawnReturnsAfterReady(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls.log")
+
+	// scion stub: scion start logs the call AND scion list returns running
+	scionStub := `#!/bin/sh
+echo "$0 $@" >> ` + log + `
+case "$1" in
+  start) exit 0 ;;
+  list)  echo '[{"name":"smoke-1","phase":"running"}]'; exit 0 ;;
+  *)     exit 0 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(dir, "scion"), []byte(scionStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bash"),
+		[]byte("#!/bin/sh\necho \"$0 $@\" >> "+log+"\ncat \"$1\" >> "+log+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	start := time.Now()
+	if err := runSpawn([]string{"smoke-1", "--type", "researcher", "task..."}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	// Should return promptly because phase=running on first poll.
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("spawn returned too slowly (%s); should poll fast and exit on first running tick", elapsed)
+	}
+
+	body, _ := os.ReadFile(log)
+	if !strings.Contains(string(body), "start smoke-1") {
+		t.Fatalf("scion start not invoked: %s", body)
+	}
+	if !strings.Contains(string(body), "list --format json") {
+		t.Fatalf("scion list not invoked for ready-poll: %s", body)
+	}
+}
+
+func TestSpawn_WatchFlagPassesAttach(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls.log")
+
+	scionStub := `#!/bin/sh
+echo "$0 $@" >> ` + log + `
+case "$1" in
+  start) exit 0 ;;
+  list)  echo '[{"name":"smoke-watch","phase":"running"}]'; exit 0 ;;
+esac
+`
+	os.WriteFile(filepath.Join(dir, "scion"), []byte(scionStub), 0o755)
+	os.WriteFile(filepath.Join(dir, "bash"),
+		[]byte("#!/bin/sh\necho \"$0 $@\" >> "+log+"\ncat \"$1\" >> "+log+"\n"), 0o755)
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	if err := runSpawn([]string{"smoke-watch", "--type", "researcher", "--watch", "task..."}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	body, _ := os.ReadFile(log)
+	if !strings.Contains(string(body), "--attach") {
+		t.Fatalf("--watch should pass --attach to scion start: %s", body)
 	}
 }
