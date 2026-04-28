@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 )
 
 func runSpawn(args []string) error {
@@ -48,7 +49,30 @@ func runSpawn(args []string) error {
 	c := exec.Command("scion", cmd...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	return c.Run()
+	// Hybrid: surface scion start's own immediate failures (template
+	// not found, bad args) directly. Post-dispatch failures (image
+	// pull, container init) get caught by the readiness poll below.
+	if err := c.Run(); err != nil {
+		return err
+	}
+
+	// Read timeout override from env; default 15s.
+	timeout := 15 * time.Second
+	if v := os.Getenv("DARKEN_SPAWN_READY_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			timeout = d
+		}
+	}
+
+	// Poll for ready (or error / timeout). Print one-line progress to stderr.
+	fmt.Fprintf(os.Stderr, "[spawning %s] container starting\n", name)
+	phase, err := pollUntilReady(name, timeout, 500*time.Millisecond)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[spawning %s] FAILED at phase=%s — %v\n", name, phase, err)
+		return fmt.Errorf("agent %s did not reach ready: %w", name, err)
+	}
+	fmt.Fprintf(os.Stderr, "[spawning %s] ready\n", name)
+	return nil
 }
 
 // runShell invokes a shell script via bash. Stdout/stderr are inherited
