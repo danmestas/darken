@@ -16,21 +16,26 @@ REGISTRY         ?= local
 TAG              ?= latest
 AGENT_INFRA_PATH ?= $(HOME)/projects/agent-infra
 
-# prebuild-bones: cross-compile agent-infra binaries on the host for linux/arm64.
+# prebuild-bones: cross-compile the unified bones CLI for linux/arm64.
 # Required before running `make claude` because agent-infra and its dependency
 # EdgeSync/leaf are private repos (no credentials in Docker build context).
+#
+# bones is the unified CLI (replaces the old agent-init + agent-tasks
+# binaries). Subcommands:
+#   bones init                 — create workspace (was: agent-init)
+#   bones tasks <subcmd>       — task management (was: agent-tasks)
+#   bones repo <subcmd>        — fossil-style repo ops (new)
 .PHONY: prebuild-bones
 prebuild-bones:
+	# Clean bin/ first so stale binaries (e.g. the prior agent-init +
+	# agent-tasks pair) don't get COPY'd into the Docker image.
+	rm -rf claude/bin codex/bin pi/bin gemini/bin
 	mkdir -p claude/bin codex/bin pi/bin gemini/bin
 	cd $(AGENT_INFRA_PATH) && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/agent-init ./cmd/agent-init && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/agent-tasks ./cmd/agent-tasks && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/codex/bin/agent-init ./cmd/agent-init && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/codex/bin/agent-tasks ./cmd/agent-tasks && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/pi/bin/agent-init ./cmd/agent-init && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/pi/bin/agent-tasks ./cmd/agent-tasks && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/gemini/bin/agent-init ./cmd/agent-init && \
-	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/gemini/bin/agent-tasks ./cmd/agent-tasks
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/bones ./cmd/bones && \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/codex/bin/bones ./cmd/bones && \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/pi/bin/bones ./cmd/bones && \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/gemini/bin/bones ./cmd/bones
 
 .PHONY: claude
 claude:

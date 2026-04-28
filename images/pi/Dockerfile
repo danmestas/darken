@@ -1,11 +1,11 @@
 # darkish-pi — universal baseline + pi backend (OpenRouter-routed).
 # Mirrors A-01's pattern.
 #
-# NOTE (A-03 mirrors A-01 / A-02 blockers):
-#   - agent-infra is private; binaries pre-compiled on the host (linux/arm64)
-#     and copied from ./bin/. Refresh: make -C images prebuild-bones.
+# NOTE: agent-infra is private; the unified bones CLI is pre-compiled on
+# the host (linux/arm64) and copied from ./bin/. Refresh:
+#   make -C images prebuild-bones
+# bones exposes init/tasks/repo as subcommands.
 #   - mgrep omitted (paid; context-mode replaces).
-#   - Only agent-init + agent-tasks ship today; other bones cmds pending.
 #   - Pi auth: OPENROUTER_API_KEY env var (no OAuth file mount).
 #   - Pi uses pi-coding-agent CLI; --non-interactive flag bypasses any
 #     first-run trust dialog observed in existing pi-templates.
@@ -21,9 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       jq ripgrep fzf less gh ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Pre-built bones binaries.
+# 2. Pre-built bones unified CLI.
 COPY bin/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/agent-init /usr/local/bin/agent-tasks
+RUN chmod +x /usr/local/bin/bones
 
 # 3. Universal skill: caveman.
 RUN mkdir -p /home/scion/skills && \

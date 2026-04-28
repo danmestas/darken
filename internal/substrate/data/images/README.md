@@ -11,7 +11,7 @@ Every `darkish-*` image carries the same baseline regardless of backend:
 | Layer | Contents | Notes |
 |---|---|---|
 | apt utilities | `jq`, `ripgrep`, `fzf`, `less`, `gh`, `ca-certificates`, `curl`, `git` | Standard tools every harness uses |
-| bones binaries | `agent-init`, `agent-tasks` | Pre-compiled on the host (`make prebuild-bones`) and copied from `<backend>/bin/`. agent-infra is currently private; in-Docker `git clone` blocked until it goes public. The other 12 bones names from the spec (assert, autoclaim, chat, etc.) are not yet in the upstream agent-infra repo. |
+| bones unified CLI | `bones` (subcommands: `init`, `tasks`, `repo`, ...) | Pre-compiled on the host from `~/projects/agent-infra/cmd/bones` (`make prebuild-bones`) and copied from `<backend>/bin/`. agent-infra is currently private; in-Docker `git clone` blocked until it goes public. Replaces the prior `agent-init` + `agent-tasks` binaries — both are now subcommands. |
 | Universal skill | `caveman` (cloned from `juliusbrussee/caveman`) | Communication-tier discipline; mounted at `/home/scion/skills/caveman/` |
 | Universal MCP | `context-mode` (npm `@mksglu/context-mode` with git-clone fallback to `mksglu/context-mode`) | Sandboxed raw-output handling; every harness faces context-window pressure |
 | Trust prelude | per-backend (validated for claude + codex; placeholders for pi + gemini) | Suppresses first-encounter trust dialogs |
@@ -22,7 +22,7 @@ it is a paid product. Code search is handled by `context-mode` instead.
 ### Refresh procedure
 
 ```bash
-make -C images prebuild-bones    # rebuild bones binaries from ~/projects/agent-infra
+make -C images prebuild-bones    # rebuild the bones CLI from ~/projects/agent-infra
 make -C images all               # rebuild all four darkish-* images
 ```
 
@@ -126,8 +126,8 @@ First-time setup needs:
    make -C images prebuild-bones
    ```
 
-   This cross-compiles `agent-init` and `agent-tasks` for `linux/arm64`
-   from `~/projects/agent-infra` into all four `images/<backend>/bin/`
+   This cross-compiles the unified `bones` CLI for `linux/arm64` from
+   `~/projects/agent-infra/cmd/bones` into all four `images/<backend>/bin/`
    directories. Re-run after `agent-infra` updates.
 
 Then:
