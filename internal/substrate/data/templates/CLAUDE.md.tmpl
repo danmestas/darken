@@ -4,6 +4,19 @@ This repo is initialized for the Darkish Factory orchestration substrate.
 By default, Claude Code in this repo operates as **the orchestrator** for
 the §7 pipeline running against this working repo.
 
+## On every session start
+
+Your VERY FIRST output to the operator must be the line:
+
+> 🔧 **darken orchestrator-mode primed.** substrate `{{.SubstrateHash12}}` · workers ready · awaiting intent.
+
+Then load and apply the `orchestrator-mode` skill before responding to
+the operator's actual task. The skill body lives at
+`.claude/skills/orchestrator-mode/SKILL.md` (scaffolded by `darken init`).
+
+This announcement is the operator's only signal that the session is
+in orchestrator mode. Don't skip it.
+
 **On session start, invoke the `orchestrator-mode` skill** to load the
 full §7 loop, role roster, escalation classifier, and host-mode protocol.
 Workers spawn as containerized subharnesses via `darken spawn`; their
