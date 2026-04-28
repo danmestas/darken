@@ -79,6 +79,18 @@ Single source of truth for "how do I onboard this thing": the README quick-start
 - Add a one-liner pointing at `darken upgrade-init` for the existing-repo / post-`brew upgrade` path
 - "What runs" detail (init scaffolds + bootstrap stages prereqs + creds, etc.) stays under per-command sections, not in the headline
 
+**`README.md` CLI Reference (new section):**
+
+Add a grouped CLI reference table after Quick Start. Today operators discover commands via `darken --help` (registration order, no grouping); the new table organizes by purpose. Five groups:
+
+- **Lifecycle:** `setup`, `upgrade-init`, `uninstall-init`, `init`
+- **Operations (the §7 loop):** `spawn`, `redispatch`, `list`, `apply`
+- **Inspection:** `doctor`, `status`, `dashboard`, `history`, `version`
+- **Targeted setup:** `bootstrap`, `creds`, `images`, `skills`
+- **Authoring:** `create-harness`, `orchestrate`
+
+Each row carries a one-line purpose. The `setup` row anchors Lifecycle so the table reinforces what Quick Start says.
+
 **`CLAUDE.md`** (project-root operator-side ops reference):
 - Same three-command-to-one collapse if it carries that sequence
 - Verify with `grep -n "darken init" CLAUDE.md` and patch the relevant block
