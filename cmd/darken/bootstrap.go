@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/danmestas/darken/internal/substrate"
 )
@@ -66,51 +67,98 @@ func ensureHubSecrets() error {
 // Soft-fails per-harness so one missing skill canon doesn't abort
 // the whole bootstrap.
 func ensureAllSkillsStaged() error {
-	root, err := repoRoot()
+	templatesDir, cleanup, err := resolveTemplatesDir()
 	if err != nil {
 		return err
 	}
-	dirs, err := os.ReadDir(filepath.Join(root, ".scion", "templates"))
-	if err != nil {
-		// Any ReadDir failure (missing dir, permission denied, etc.) falls
-		// through to embedded. Permission-denied is unexpected here but
-		// safe to treat as "no project templates" — the operator's binary
-		// always carries a complete embedded substrate.
-		return ensureAllSkillsStagedFromEmbedded()
-	}
-	for _, d := range dirs {
-		if !d.IsDir() || d.Name() == "base" {
-			continue
+	defer cleanup()
+
+	return withTemplatesDirEnv(templatesDir, func() error {
+		dirs, err := os.ReadDir(templatesDir)
+		if err != nil {
+			return fmt.Errorf("read templates dir %s: %w", templatesDir, err)
 		}
-		if err := runSubstrateScript("scripts/stage-skills.sh", []string{d.Name()}); err != nil {
-			fmt.Fprintf(os.Stderr, "bootstrap: stage-skills %s failed: %v\n", d.Name(), err)
+		for _, d := range dirs {
+			if !d.IsDir() || d.Name() == "base" {
+				continue
+			}
+			if err := runSubstrateScript("scripts/stage-skills.sh", []string{d.Name()}); err != nil {
+				fmt.Fprintf(os.Stderr, "bootstrap: stage-skills %s failed: %v\n", d.Name(), err)
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
-// ensureAllSkillsStagedFromEmbedded iterates the embedded .scion/templates/
-// list when the working repo has no project-local templates dir.
-//
-// Returns the fs.ReadDir error directly (vs the project-layer path
-// which swallows per-template stage-skills errors). An embedded read
-// failure indicates a corrupt binary, which is fatal and should
-// surface; per-template failures are operator-config issues that
-// shouldn't abort the whole bootstrap.
-func ensureAllSkillsStagedFromEmbedded() error {
-	entries, err := fs.ReadDir(substrate.EmbeddedFS(), "data/.scion/templates")
+// withTemplatesDirEnv runs fn with DARKEN_TEMPLATES_DIR set to dir,
+// restoring the previous value (or unsetting) afterward. Used by
+// callers that need stage-skills.sh to read manifests from a specific
+// path (typically the resolved project-local-or-embedded location).
+func withTemplatesDirEnv(dir string, fn func() error) error {
+	prev, hadPrev := os.LookupEnv("DARKEN_TEMPLATES_DIR")
+	os.Setenv("DARKEN_TEMPLATES_DIR", dir)
+	defer func() {
+		if hadPrev {
+			os.Setenv("DARKEN_TEMPLATES_DIR", prev)
+		} else {
+			os.Unsetenv("DARKEN_TEMPLATES_DIR")
+		}
+	}()
+	return fn()
+}
+
+// resolveTemplatesDir returns a path containing per-harness manifest
+// dirs (each with scion-agent.yaml). Prefers the operator's project
+// templates if present; otherwise extracts the embedded substrate
+// templates to a tmpdir. The returned cleanup func is a no-op for the
+// project case and an os.RemoveAll for the embedded case.
+func resolveTemplatesDir() (string, func(), error) {
+	noop := func() {}
+
+	if root, err := repoRoot(); err == nil {
+		projectDir := filepath.Join(root, ".scion", "templates")
+		if info, statErr := os.Stat(projectDir); statErr == nil && info.IsDir() {
+			return projectDir, noop, nil
+		}
+	}
+
+	return extractEmbeddedTemplates()
+}
+
+// extractEmbeddedTemplates copies the embedded data/.scion/templates
+// tree to a tmpdir and returns its path. The cleanup func removes the
+// tmpdir; callers should defer it.
+func extractEmbeddedTemplates() (string, func(), error) {
+	tmpDir, err := os.MkdirTemp("", "darken-templates-*")
 	if err != nil {
-		return err
+		return "", nil, err
 	}
-	for _, e := range entries {
-		if !e.IsDir() || e.Name() == "base" {
-			continue
+	cleanup := func() { os.RemoveAll(tmpDir) }
+
+	const root = "data/.scion/templates"
+	walkErr := fs.WalkDir(substrate.EmbeddedFS(), root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		if err := runSubstrateScript("scripts/stage-skills.sh", []string{e.Name()}); err != nil {
-			fmt.Fprintf(os.Stderr, "bootstrap: stage-skills %s failed: %v\n", e.Name(), err)
+		if path == root {
+			return nil
 		}
+		rel := strings.TrimPrefix(path, root+"/")
+		dst := filepath.Join(tmpDir, rel)
+		if d.IsDir() {
+			return os.MkdirAll(dst, 0o755)
+		}
+		body, err := fs.ReadFile(substrate.EmbeddedFS(), path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, body, 0o644)
+	})
+	if walkErr != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("extract embedded templates: %w", walkErr)
 	}
-	return nil
+	return tmpDir, cleanup, nil
 }
 
 func finalDoctor() error {
