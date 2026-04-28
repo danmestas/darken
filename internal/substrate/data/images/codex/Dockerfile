@@ -1,15 +1,12 @@
 # darkish-codex — universal baseline + codex backend.
 # Mirrors darkish-claude's pattern.
 #
-# NOTE (A-02 mirrors A-01 blockers):
-#   - agent-infra is private; binaries are pre-compiled on the host
-#     (CGO_ENABLED=0 GOOS=linux GOARCH=arm64) and copied from ./bin/.
-#     Restore in-Docker bones-builder once agent-infra goes public.
-#   - mgrep is intentionally omitted (paid product; operator uses
-#     context-mode for search instead).
-#   - Only agent-init and agent-tasks ship today; the other 12 named
-#     bones cmds are not yet present in agent-infra upstream.
-#   - Refresh binaries with: make -C images prebuild-bones
+# NOTE: agent-infra is private; the unified bones CLI is pre-compiled on
+# the host (CGO_ENABLED=0 GOOS=linux GOARCH=arm64) and copied from ./bin/.
+# bones exposes init/tasks/repo as subcommands. Refresh with:
+#   make -C images prebuild-bones
+#
+# mgrep is intentionally omitted in favor of context-mode (paid + private).
 
 ARG BASE_IMAGE=local/scion-codex:latest
 
@@ -22,9 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       jq ripgrep fzf less gh ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Pre-built bones binaries (agent-init, agent-tasks).
+# 2. Pre-built bones unified CLI.
 COPY bin/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/agent-init /usr/local/bin/agent-tasks
+RUN chmod +x /usr/local/bin/bones
 
 # 3. Universal skill: caveman.
 RUN mkdir -p /home/scion/skills && \

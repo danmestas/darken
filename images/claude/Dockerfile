@@ -1,19 +1,20 @@
 # darkish-claude — universal baseline + claude backend.
 # Layers ordered heaviest-at-bottom for cache efficiency.
 #
-# NOTE (A-01 blockers resolved):
-#   - agent-infra and its dependency EdgeSync/leaf are private repos.
-#     Binaries are pre-compiled on the host (CGO_ENABLED=0 GOOS=linux) and
-#     copied from ./bin/ into the image. The bones-builder stage is omitted
-#     until SSH/netrc credentials can be mounted at build time.
-#     Restore the multi-stage build once the repos are public or CI has creds.
-#   - mgrep-code-search is also private; omitted until accessible.
-#   - Only 4 cmds exist in the current agent-infra (agent-init, agent-tasks,
-#     orchestrator-validate-plan, space-invaders-orchestrate); the 12 remaining
-#     binaries from the spec do not yet exist. Only agent-init and agent-tasks
-#     are included as they are the core operational primitives.
-#   - agent-infra requires go 1.26; pre-built on go 1.26.2 darwin/arm64 for
-#     linux/arm64 target.
+# NOTE: agent-infra and its dependency EdgeSync/leaf are private repos.
+# The unified bones CLI is pre-compiled on the host (CGO_ENABLED=0 GOOS=linux
+# GOARCH=arm64) and copied from ./bin/ into the image. Restore the multi-
+# stage build once the repos are public or CI has credentials.
+#
+# bones replaces the prior agent-init + agent-tasks binaries with a single
+# CLI that exposes them as subcommands:
+#   bones init                — create a workspace (was: agent-init)
+#   bones tasks <subcmd>      — task management   (was: agent-tasks)
+#   bones repo <subcmd>       — fossil-style repo ops (new)
+#
+# agent-infra requires go 1.26; pre-built on go 1.26.2 darwin/arm64 for
+# linux/arm64 target. mgrep-code-search is intentionally omitted in favor
+# of context-mode (private + paid).
 
 ARG BASE_IMAGE=local/scion-claude:latest
 
@@ -26,11 +27,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       jq ripgrep fzf less gh ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Pre-built bones binaries (agent-init, agent-tasks).
+# 2. Pre-built bones unified CLI.
 #    Compiled on host: CGO_ENABLED=0 GOOS=linux GOARCH=arm64
 #    Refresh with: make -C images prebuild-bones
 COPY bin/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/agent-init /usr/local/bin/agent-tasks
+RUN chmod +x /usr/local/bin/bones
 
 # 3. Universal skill: caveman.
 RUN mkdir -p /home/scion/skills && \

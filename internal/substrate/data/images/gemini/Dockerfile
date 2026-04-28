@@ -1,11 +1,11 @@
 # darkish-gemini — universal baseline + gemini backend.
 # Mirrors A-01's pattern.
 #
-# NOTE (A-04 mirrors A-01 / A-02 / A-03 blockers):
-#   - agent-infra is private; binaries pre-compiled on the host (linux/arm64)
-#     and copied from ./bin/. Refresh: make -C images prebuild-bones.
+# NOTE: agent-infra is private; the unified bones CLI is pre-compiled on
+# the host (linux/arm64) and copied from ./bin/. Refresh:
+#   make -C images prebuild-bones
+# bones exposes init/tasks/repo as subcommands.
 #   - mgrep omitted (paid; context-mode replaces).
-#   - Only agent-init + agent-tasks ship today; other bones cmds pending.
 #   - Gemini auth (3 options):
 #       * GEMINI_API_KEY env var (free tier on AI Studio)
 #       * ~/.gemini/oauth_creds.json (gemini-cli OAuth; scion auto-detects)
@@ -24,9 +24,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       jq ripgrep fzf less gh ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Pre-built bones binaries.
+# 2. Pre-built bones unified CLI.
 COPY bin/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/agent-init /usr/local/bin/agent-tasks
+RUN chmod +x /usr/local/bin/bones
 
 # 3. Universal skill: caveman.
 RUN mkdir -p /home/scion/skills && \
