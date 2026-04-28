@@ -53,6 +53,10 @@ func runSpawn(args []string) error {
 
 // runShell invokes a shell script via bash. Stdout/stderr are inherited
 // so the user sees script progress in-place.
+//
+// TODO: remove once all callers (bootstrap.go, creds.go, skills.go,
+// apply.go) migrate to runSubstrateScript via subsequent Phase 5
+// tasks. Spawn.go is the first migration; bootstrap.go is Task 2.
 func runShell(script string, args ...string) error {
 	c := exec.Command("bash", append([]string{script}, args...)...)
 	c.Stdout = os.Stdout
