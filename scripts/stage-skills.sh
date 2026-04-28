@@ -46,7 +46,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-MANIFEST_DIR="${REPO}/.scion/templates/${HARNESS}"
+# DARKEN_TEMPLATES_DIR is set by `darken bootstrap` to a tmpdir holding
+# the embedded substrate templates when the operator's project doesn't
+# carry its own .scion/templates/. Direct invocations (e.g. operator
+# running `bash scripts/stage-skills.sh researcher` from the darken
+# source repo) fall back to ${REPO}/.scion/templates which is the
+# original behavior.
+TEMPLATES_DIR="${DARKEN_TEMPLATES_DIR:-${REPO}/.scion/templates}"
+MANIFEST_DIR="${TEMPLATES_DIR}/${HARNESS}"
 if [[ ! -d "${MANIFEST_DIR}" ]]; then
   echo "stage-skills: harness '${HARNESS}' not found at ${MANIFEST_DIR}" >&2
   exit 1

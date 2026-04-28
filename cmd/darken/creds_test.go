@@ -15,9 +15,9 @@ func TestCredsForwardsToScript(t *testing.T) {
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	_ = runCreds([]string{"claude"})
 	body, _ := os.ReadFile(log)
-	if !strings.Contains(string(body), "stage-creds.sh") {
-		t.Fatalf("creds did not invoke stage-creds.sh: %s", body)
-	}
+	// runSubstrateScript extracts the embedded script to a randomly-named
+	// tmpfile, so we no longer assert on "stage-creds.sh" in the path.
+	// The contract is that the forwarded backend arg reaches bash.
 	if !strings.Contains(string(body), "claude") {
 		t.Fatalf("backend arg `claude` not forwarded: %s", body)
 	}
