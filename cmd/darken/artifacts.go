@@ -95,7 +95,7 @@ func claudeMdBody(targetDir string) ([]byte, error) {
 	}
 	tmpl, err := template.New("claude").Parse(string(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse CLAUDE.md template: %w", err)
 	}
 	data := struct {
 		RepoName        string
@@ -106,7 +106,7 @@ func claudeMdBody(targetDir string) ([]byte, error) {
 	}
 	var sb strings.Builder
 	if err := tmpl.Execute(&sb, data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("execute CLAUDE.md template: %w", err)
 	}
 	return []byte(sb.String()), nil
 }
