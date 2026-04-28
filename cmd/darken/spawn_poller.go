@@ -10,8 +10,9 @@ import (
 // agentInfo is a partial mirror of scion's pkg/api/types.go AgentInfo.
 // Only the fields Phase 7's poller needs.
 type agentInfo struct {
-	Name  string `json:"name"`
-	Phase string `json:"phase"`
+	Name     string `json:"name"`
+	Phase    string `json:"phase"`
+	Template string `json:"template"` // role/template name used at spawn time (e.g. "researcher")
 }
 
 // pollUntilReady runs `scion list --format json` in a tick loop, looking
