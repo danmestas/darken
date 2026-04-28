@@ -34,6 +34,7 @@ var subcommands = []subcommand{
 	{"redispatch", "kill + re-spawn an agent with the same role", runRedispatch},
 	{"init", "scaffold CLAUDE.md in a target dir", runInit},
 	{"upgrade-init", "refresh project scaffolds against the binary's substrate, then verify", runUpgradeInit},
+	{"uninstall-init", "remove the project scaffolds darken init wrote (preserves customizations)", runUninstallInit},
 	{"version", "print binary version + embedded substrate hash", runVersion},
 	{"status", "print one-line status (statusLine-friendly)", runStatus},
 	{"dashboard", "open scion's web UI in the default browser", runDashboard},

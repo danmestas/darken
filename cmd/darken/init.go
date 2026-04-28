@@ -3,14 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"text/template"
-
-	"github.com/danmestas/darken/internal/substrate"
 )
 
 func runInit(args []string) error {
@@ -22,7 +18,6 @@ func runInit(args []string) error {
 		return err
 	}
 
-	// Phase 6: prereq check — fail fast if bones/scion/docker missing.
 	if err := verifyInitPrereqs(); err != nil {
 		return err
 	}
@@ -36,23 +31,15 @@ func runInit(args []string) error {
 	if err != nil {
 		return err
 	}
-
 	if _, err := os.Stat(target); err != nil {
 		return fmt.Errorf("target dir does not exist: %s", target)
 	}
 
-	claudePath := filepath.Join(target, "CLAUDE.md")
-	exists := false
-	if _, err := os.Stat(claudePath); err == nil {
-		exists = true
-	}
+	arts := initArtifacts(target)
 
-	// Decision matrix for whether to write CLAUDE.md.
-	// --refresh + --force: explicit regeneration → write
-	// --refresh alone:     preserve operator customizations → skip
-	// initial init + --force:  force overwrite → write
-	// initial init + exists:   skip (preserve existing)
-	// initial init + missing:  write
+	// Decision: should we (re)write CLAUDE.md?
+	claudePath := filepath.Join(target, "CLAUDE.md")
+	_, claudeExists := statResult(claudePath)
 	var writeCLAUDE bool
 	switch {
 	case *refresh && *force:
@@ -61,60 +48,48 @@ func runInit(args []string) error {
 		writeCLAUDE = false
 	case *force:
 		writeCLAUDE = true
-	case !exists:
+	case !claudeExists:
 		writeCLAUDE = true
 	default:
 		writeCLAUDE = false
 	}
 
 	if *dryRun {
-		if writeCLAUDE {
-			fmt.Printf("would create %s\n", claudePath)
-		} else {
-			fmt.Printf("would skip %s (already exists; use --force to overwrite)\n", claudePath)
+		for _, art := range arts {
+			dst := filepath.Join(target, art.RelPath)
+			if art.RelPath == "CLAUDE.md" {
+				if writeCLAUDE {
+					fmt.Printf("would create %s\n", dst)
+				} else {
+					fmt.Printf("would skip %s (already exists; use --force to overwrite)\n", dst)
+				}
+				continue
+			}
+			fmt.Printf("would write %s\n", dst)
 		}
 		return nil
 	}
 
-	if writeCLAUDE {
-		body, err := renderCLAUDE(target)
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(claudePath, []byte(body), 0o644); err != nil {
-			return err
-		}
-		fmt.Printf("wrote %s\n", claudePath)
-	} else if exists {
-		if *refresh {
-			fmt.Printf("preserved %s (use --refresh --force to regenerate)\n", claudePath)
-		} else {
-			fmt.Printf("skipped %s (already exists; use --force to overwrite)\n", claudePath)
+	// Write each artifact. CLAUDE.md is critical (hard fail); other
+	// artifacts are best-effort (log + continue) — matches the
+	// pre-refactor contract.
+	for _, art := range arts {
+		if err := writeArtifact(target, art, writeCLAUDE, *refresh); err != nil {
+			if art.RelPath == "CLAUDE.md" {
+				return fmt.Errorf("write CLAUDE.md: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "init: %s: %v\n", art.RelPath, err)
 		}
 	}
 
-	// Scaffold skills (project-local copies of the embedded host-mode skills)
-	for _, skill := range []string{"orchestrator-mode", "subagent-to-subharness"} {
-		if err := scaffoldSkill(target, skill); err != nil {
-			fmt.Fprintf(os.Stderr, "init: skill scaffold %s failed: %v\n", skill, err)
-		} else {
-			fmt.Printf("scaffolded .claude/skills/%s/SKILL.md\n", skill)
-		}
+	// Persist the manifest after all artifacts are written. Best-effort:
+	// a manifest write failure shouldn't abort init — uninstall will fall
+	// back to comparing against the binary's current Body() output.
+	if err := writeInitManifest(target, arts); err != nil {
+		fmt.Fprintf(os.Stderr, "init: manifest write failed: %v\n", err)
 	}
 
-	// Scaffold statusLine + gitignore
-	if err := scaffoldStatusLine(target); err != nil {
-		fmt.Fprintf(os.Stderr, "init: statusLine scaffold failed: %v\n", err)
-	} else {
-		fmt.Println("scaffolded .claude/settings.local.json")
-	}
-	if err := scaffoldGitignore(target); err != nil {
-		fmt.Fprintf(os.Stderr, "init: .gitignore append failed: %v\n", err)
-	} else {
-		fmt.Println("appended darken entries to .gitignore")
-	}
-
-	// bones init (soft-fail if bones not on PATH)
+	// bones init (unchanged)
 	if err := runBonesInit(target); err != nil {
 		fmt.Fprintf(os.Stderr, "init: bones init failed: %v\n", err)
 	} else if _, err := exec.LookPath("bones"); err == nil {
@@ -124,122 +99,96 @@ func runInit(args []string) error {
 	return nil
 }
 
-// renderCLAUDE renders the embedded CLAUDE.md template with the
-// target dir's basename as RepoName and the first 12 chars of the
-// embedded substrate hash as SubstrateHash12.
-func renderCLAUDE(targetDir string) (string, error) {
-	body, err := readEmbeddedTemplate("data/templates/CLAUDE.md.tmpl")
-	if err != nil {
-		return "", err
-	}
-	tmpl, err := template.New("claude").Parse(string(body))
-	if err != nil {
-		return "", err
-	}
-	data := struct {
-		RepoName        string
-		SubstrateHash12 string
-	}{
-		RepoName:        filepath.Base(targetDir),
-		SubstrateHash12: firstN(substrate.EmbeddedHash(), 12),
-	}
-	var sb strings.Builder
-	if err := tmpl.Execute(&sb, data); err != nil {
-		return "", err
-	}
-	return sb.String(), nil
-}
-
-func readEmbeddedTemplate(path string) ([]byte, error) {
-	body, err := fs.ReadFile(substrate.EmbeddedFS(), path)
-	if err != nil {
-		return nil, fmt.Errorf("embedded template not found: %s: %w", path, err)
-	}
-	return body, nil
-}
-
-// firstN returns the first n characters of s, or all of s if shorter.
-func firstN(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
-// scaffoldSkill copies a skill from the embedded substrate into
-// .claude/skills/<name>/SKILL.md so Claude Code's project-local skill
-// discovery picks it up.
-func scaffoldSkill(targetDir, name string) error {
-	body, err := fs.ReadFile(substrate.EmbeddedFS(), "data/skills/"+name+"/SKILL.md")
-	if err != nil {
-		return err
-	}
-	dst := filepath.Join(targetDir, ".claude", "skills", name, "SKILL.md")
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(dst, body, 0o644)
-}
-
-// scaffoldStatusLine writes .claude/settings.local.json with a
-// statusLine.command pointing at `darken status`. If the file already
-// exists, leaves it alone (don't clobber other settings).
-func scaffoldStatusLine(targetDir string) error {
-	path := filepath.Join(targetDir, ".claude", "settings.local.json")
-	if _, err := os.Stat(path); err == nil {
-		return nil // existing settings; don't clobber
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	body := `{
-  "statusLine": {
-    "command": "darken status",
-    "type": "command"
-  }
-}
-`
-	return os.WriteFile(path, []byte(body), 0o644)
-}
-
-// scaffoldGitignore appends darken-related entries to <target>/.gitignore.
-// Idempotent — only appends entries not already present.
-func scaffoldGitignore(targetDir string) error {
-	path := filepath.Join(targetDir, ".gitignore")
-	var existing []byte
-	if b, err := os.ReadFile(path); err == nil {
-		existing = b
-	}
-	entries := []string{
-		"# darken: scion runtime + per-spawn worktrees + claude-code worktrees",
-		".scion/agents/",
-		".scion/skills-staging/",
-		".scion/audit.jsonl",
-		".claude/worktrees/",
-		".claude/settings.local.json",
-		".superpowers/",
-	}
-	var add []string
-	for _, e := range entries {
-		if !strings.Contains(string(existing), e) {
-			add = append(add, e)
+// writeArtifact dispatches on art.Kind to write a file or append the
+// gitignore-lines block. Idempotent for gitignore-lines (skips lines
+// already present).
+func writeArtifact(target string, art artifact, writeCLAUDE, refresh bool) error {
+	dst := filepath.Join(target, art.RelPath)
+	switch art.Kind {
+	case "file":
+		if art.RelPath == "CLAUDE.md" {
+			if !writeCLAUDE {
+				if _, exists := statResult(dst); exists {
+					if refresh {
+						fmt.Printf("preserved %s (use --refresh --force to regenerate)\n", dst)
+					} else {
+						fmt.Printf("skipped %s (already exists; use --force to overwrite)\n", dst)
+					}
+				}
+				return nil
+			}
+			body, err := art.Body()
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(dst, body, 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("wrote %s\n", dst)
+			return nil
 		}
-	}
-	if len(add) == 0 {
+		if art.RelPath == ".claude/settings.local.json" {
+			// Don't clobber existing settings (operator may have added other keys).
+			if _, exists := statResult(dst); exists {
+				return nil
+			}
+		}
+		body, err := art.Body()
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, body, 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("scaffolded %s\n", art.RelPath)
 		return nil
+
+	case "gitignore-lines":
+		// Append only lines not already present (idempotent).
+		var existing []byte
+		if b, err := os.ReadFile(dst); err == nil {
+			existing = b
+		}
+		var add []string
+		for _, line := range gitignoreLines {
+			if !strings.Contains(string(existing), line) {
+				add = append(add, line)
+			}
+		}
+		if len(add) == 0 {
+			return nil
+		}
+		f, err := os.OpenFile(dst, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+			f.WriteString("\n")
+		}
+		for _, line := range add {
+			f.WriteString(line + "\n")
+		}
+		fmt.Println("appended darken entries to .gitignore")
+		return nil
+
+	default:
+		return fmt.Errorf("unknown artifact kind: %s", art.Kind)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+}
+
+// statResult is a tiny helper: reports (info, exists) without an error
+// for the caller to handle. Existence is the only signal we need at
+// these call sites.
+func statResult(path string) (os.FileInfo, bool) {
+	info, err := os.Stat(path)
 	if err != nil {
-		return err
+		return nil, false
 	}
-	defer f.Close()
-	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
-		f.WriteString("\n")
-	}
-	for _, e := range add {
-		f.WriteString(e + "\n")
-	}
-	return nil
+	return info, true
 }
 
 // runBonesInit shells out to `bones init` in the target dir if bones is
