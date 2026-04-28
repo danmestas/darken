@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 )
 
 func runSpawn(args []string) error {
@@ -28,16 +27,11 @@ func runSpawn(args []string) error {
 	}
 	posArgs := fs.Args()
 
-	root, err := repoRoot()
-	if err != nil {
-		return err
-	}
-
 	if !*noStage {
-		if err := runShell(filepath.Join(root, "scripts", "stage-creds.sh"), "all"); err != nil {
+		if err := runSubstrateScript("scripts/stage-creds.sh", []string{"all"}); err != nil {
 			fmt.Fprintln(os.Stderr, "spawn: stage-creds non-fatal:", err)
 		}
-		if err := runShell(filepath.Join(root, "scripts", "stage-skills.sh"), *harnessType); err != nil {
+		if err := runSubstrateScript("scripts/stage-skills.sh", []string{*harnessType}); err != nil {
 			return fmt.Errorf("stage-skills failed: %w", err)
 		}
 	}

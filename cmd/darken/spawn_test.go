@@ -10,12 +10,21 @@ import (
 func TestSpawnInvokesStageThenScion(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "calls.log")
-	for _, b := range []string{"scion", "bash"} {
-		stub := filepath.Join(dir, b)
-		if err := os.WriteFile(stub, []byte(
-			"#!/bin/sh\necho \"$0 $@\" >> "+log+"\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+
+	// scion stub: log invocation args (used to assert `start smoke-1`).
+	scionStub := filepath.Join(dir, "scion")
+	if err := os.WriteFile(scionStub, []byte(
+		"#!/bin/sh\necho \"$0 $@\" >> "+log+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// bash stub: log args + dump the script body. spawn now extracts
+	// embedded substrate scripts to a temp file, so the file name is
+	// random — but the body's own header comment names the script
+	// (e.g. "# stage-creds.sh — ..."), which we can grep for.
+	bashStub := filepath.Join(dir, "bash")
+	if err := os.WriteFile(bashStub, []byte(
+		"#!/bin/sh\necho \"$0 $@\" >> "+log+"\ncat \"$1\" >> "+log+"\n"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 
