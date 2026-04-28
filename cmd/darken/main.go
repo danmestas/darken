@@ -33,6 +33,7 @@ var subcommands = []subcommand{
 	{"orchestrate", "print host-mode orchestrator skill body", runOrchestrate},
 	{"init", "scaffold CLAUDE.md in a target dir", runInit},
 	{"version", "print binary version + embedded substrate hash", runVersion},
+	{"status", "print one-line status (statusLine-friendly)", runStatus},
 }
 
 func main() {
