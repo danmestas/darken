@@ -227,7 +227,10 @@ func printUninstallManifest(root string, manifest *initManifest, classes []class
 // must pass --yes.
 func confirmTTY() (bool, error) {
 	fi, err := os.Stdin.Stat()
-	if err != nil || (fi.Mode()&os.ModeCharDevice) == 0 {
+	if err != nil {
+		return false, fmt.Errorf("stdin stat: %w", err)
+	}
+	if (fi.Mode() & os.ModeCharDevice) == 0 {
 		return false, errors.New("non-interactive context: pass --yes to confirm")
 	}
 	fmt.Print("Proceed? [y/N]: ")
@@ -295,5 +298,9 @@ func stripGitignoreLines(path string, targets []string) error {
 	if err := os.WriteFile(tmp, buf.Bytes(), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp) // best-effort cleanup
+		return err
+	}
+	return nil
 }
