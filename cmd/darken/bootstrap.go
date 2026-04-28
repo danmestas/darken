@@ -72,7 +72,10 @@ func ensureAllSkillsStaged() error {
 	}
 	dirs, err := os.ReadDir(filepath.Join(root, ".scion", "templates"))
 	if err != nil {
-		// No project-local templates is fine; embedded substrate provides them.
+		// Any ReadDir failure (missing dir, permission denied, etc.) falls
+		// through to embedded. Permission-denied is unexpected here but
+		// safe to treat as "no project templates" — the operator's binary
+		// always carries a complete embedded substrate.
 		return ensureAllSkillsStagedFromEmbedded()
 	}
 	for _, d := range dirs {
@@ -88,6 +91,12 @@ func ensureAllSkillsStaged() error {
 
 // ensureAllSkillsStagedFromEmbedded iterates the embedded .scion/templates/
 // list when the working repo has no project-local templates dir.
+//
+// Returns the fs.ReadDir error directly (vs the project-layer path
+// which swallows per-template stage-skills errors). An embedded read
+// failure indicates a corrupt binary, which is fatal and should
+// surface; per-template failures are operator-config issues that
+// shouldn't abort the whole bootstrap.
 func ensureAllSkillsStagedFromEmbedded() error {
 	entries, err := fs.ReadDir(substrate.EmbeddedFS(), "data/.scion/templates")
 	if err != nil {
