@@ -21,25 +21,81 @@ go install github.com/danmestas/darken/cmd/darken@latest
 
 The `darken` binary is self-contained — templates, scripts, Dockerfiles, and the host-mode skills are embedded. Workers spawn as containerized subharnesses (claude / codex / pi / gemini); see §5 for the roster. You'll need Docker, [scion](https://github.com/ptone/scion), and credentials for whichever backends you use (`darken creds` populates them from your local Keychain / `~/.codex/auth.json` / env vars).
 
-## Quick start — orchestrator mode in a fresh repo
+## Quick Start
+
+**Fresh project:**
 
 ```bash
-# In any repo you want to drive with the §7 pipeline:
-cd ~/projects/some-other-repo
-
-# One-time setup
-darken init                                       # scaffolds CLAUDE.md
-darken creds                                      # push hub secrets
-darken bootstrap                                  # stage skills, ensure images
-
-# Open Claude Code; CLAUDE.md auto-loads orchestrator-mode skill
-claude code
-
-# In the session, give it a task:
-# > "Audit the auth flow for compliance gaps"
-# Orchestrator routes (light/heavy), dispatches subharnesses,
-# echoes decisions, pauses only when the escalation classifier fires.
+darken setup
 ```
+
+That's it — scaffolds CLAUDE.md, stages skills, ensures Docker/scion/images/secrets, and runs `bones init`.
+
+**Existing project, post-`brew upgrade darken`:**
+
+```bash
+darken upgrade-init
+```
+
+Refreshes scaffolds against the new binary's substrate; verifies via `darken doctor --init`.
+
+Open Claude Code in the project; CLAUDE.md auto-loads the orchestrator-mode skill. Give it a task — the orchestrator routes (light/heavy), dispatches subharnesses, echoes decisions, and pauses only when the escalation classifier fires.
+
+## CLI Reference
+
+`darken --help` lists everything in registration order. The grouping below is by purpose.
+
+### Lifecycle
+
+Use these for the standard project lifecycle.
+
+| Command | Purpose |
+|---|---|
+| `darken setup` | One-shot fresh-repo onboarding (init + bootstrap) |
+| `darken upgrade-init` | Refresh project scaffolds after `brew upgrade darken` |
+| `darken uninstall-init` | Remove project scaffolds (preserves customizations + .scion/ runtime state) |
+| `darken init` | Project-only scaffolds (CLAUDE.md, .claude/skills/, .gitignore). Prefer `setup` for first-time use. |
+
+### Operations (the §7 loop)
+
+Run, watch, and recover sub-harness workers.
+
+| Command | Purpose |
+|---|---|
+| `darken spawn <name> --type <role> [task]` | Start an agent (async; default: returns at "ready") |
+| `darken redispatch <name>` | Kill + re-spawn an agent with the same role |
+| `darken list` | Pass-through to `scion list` |
+| `darken apply` | Review + apply darwin recommendations |
+
+### Inspection
+
+Check state, recent decisions, and version coherence.
+
+| Command | Purpose |
+|---|---|
+| `darken doctor [--init \| <harness>]` | Preflight + post-mortem health checks |
+| `darken status` | One-line statusLine output (mode + substrate hash) |
+| `darken dashboard` | Open scion's web UI in the default browser |
+| `darken history` | Tabular view of `.scion/audit.jsonl` |
+| `darken version` | Binary version + embedded substrate hash |
+
+### Targeted setup
+
+Use these for surgical operations when full `setup` is overkill.
+
+| Command | Purpose |
+|---|---|
+| `darken bootstrap` | Machine prereqs + per-harness skill staging |
+| `darken creds [<backend>]` | Refresh hub secrets |
+| `darken images` | Wrap `make -C images` |
+| `darken skills <harness> [--diff \| --add SKILL \| --remove SKILL]` | Manage staged skills per harness |
+
+### Authoring
+
+| Command | Purpose |
+|---|---|
+| `darken create-harness <name>` | Scaffold a new harness directory |
+| `darken orchestrate` | Print host-mode orchestrator skill body (for piping into a fresh Claude Code session) |
 
 `darken doctor` runs preflight + per-harness checks. `darken doctor <role>` shows which substrate layer (override / project / embedded) served that role's manifest.
 

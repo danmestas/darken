@@ -33,10 +33,11 @@ The `caveman` skill (mounted in every container; available globally on host) gov
 ## Operator-side quick reference
 
 ```bash
-# One-time setup (run from this repo root — c.Dir bug, see PR #2 review)
-scion server start
-bin/darken creds            # push hub secrets (claude_auth, codex_auth)
-bin/darken bootstrap        # stage skills for every harness; build images if missing
+# One-time setup (new project)
+darken setup
+
+# After `brew upgrade darken`
+darken upgrade-init
 
 # In a Claude Code session here, you (orchestrator) dispatch via:
 bin/darken spawn researcher-1 --type researcher "produce a brief on X"
