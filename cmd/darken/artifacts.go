@@ -120,3 +120,11 @@ func embeddedSkillBody(name string) ([]byte, error) {
 	}
 	return body, nil
 }
+
+// firstN returns the first n characters of s, or all of s if shorter.
+func firstN(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
