@@ -6,7 +6,7 @@ You are running inside the Darkish Factory orchestration substrate. By default i
 
 ## Substrate
 
-- **`bin/darken`** (build with `make darken`) — operator CLI. See README's CLI Reference for the full surface (~19 commands across Lifecycle / Operations / Inspection / Targeted setup / Authoring). The `darken orchestrate` subcommand prints the orchestrator skill body for piping into a fresh session.
+- **`bin/darken`** (build with `make darken`) — operator CLI. See [docs/CLI.md](docs/CLI.md) for the full surface (~19 commands across Lifecycle / Operations / Inspection / Targeted setup / Authoring). The `darken orchestrate` subcommand prints the orchestrator skill body for piping into a fresh session.
 - **`.scion/templates/<role>/`** — 13 harness manifests. The `orchestrator` template is for the containerized orchestrator deployment (Mode A); host mode (Mode B, this CLAUDE.md) uses the skill instead.
 - **`.scion/skills-staging/<role>/`** — per-harness skill bundles, mounted read-only into containers.
 - **`scion server` must be running.** `scion list` shows live agents.
