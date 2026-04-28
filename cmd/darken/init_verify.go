@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -105,6 +106,34 @@ func statusLineConfigValid(absPath string) error {
 	}
 	if cfg.StatusLine.Command == "" {
 		return fmt.Errorf("statusLine.command not set")
+	}
+	return nil
+}
+
+// prereqTool describes a binary the operator needs on PATH for darken
+// init to produce a working orchestrator-mode setup.
+type prereqTool struct {
+	name        string
+	installHint string
+}
+
+// verifyInitPrereqs returns a non-nil error listing all missing
+// prerequisite tools, with a one-liner install hint per tool. Called
+// at the top of runInit so failures surface upfront, not mid-spawn.
+func verifyInitPrereqs() error {
+	tools := []prereqTool{
+		{name: "bones", installHint: "brew install danmestas/tap/bones"},
+		{name: "scion", installHint: "see https://github.com/GoogleCloudPlatform/scion (make install)"},
+		{name: "docker", installHint: "install Docker Desktop or colima or podman"},
+	}
+	var missing []string
+	for _, t := range tools {
+		if _, err := exec.LookPath(t.name); err != nil {
+			missing = append(missing, fmt.Sprintf("  - %s not on PATH; install via: %s", t.name, t.installHint))
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("darken init prereqs missing:\n%s", strings.Join(missing, "\n"))
 	}
 	return nil
 }

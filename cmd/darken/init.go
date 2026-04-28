@@ -22,6 +22,11 @@ func runInit(args []string) error {
 		return err
 	}
 
+	// Phase 6: prereq check — fail fast if bones/scion/docker missing.
+	if err := verifyInitPrereqs(); err != nil {
+		return err
+	}
+
 	pos := flags.Args()
 	target := "."
 	if len(pos) > 0 {
