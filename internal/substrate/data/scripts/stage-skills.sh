@@ -18,7 +18,11 @@
 
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve repo root: env var (set by darken when script is extracted from
+# the embedded substrate to a tmp file) wins over BASH_SOURCE-relative.
+# Direct invocation (`bash scripts/stage-skills.sh`) still works via the
+# BASH_SOURCE fallback.
+REPO="${DARKEN_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CANONICAL="${HOME}/projects/agent-skills/skills"
 
 usage() {
