@@ -12,6 +12,9 @@ import (
 //     called as `scion list --format json`
 //   - records every invocation to a log file (one line per invocation,
 //     args space-separated)
+//
+// It also plants a no-op `bash` stub so runSpawn's stage-creds.sh /
+// stage-skills.sh shellouts don't mutate the operator's working tree.
 func stubScionForRedispatch(t *testing.T, agentName, template string) string {
 	t.Helper()
 	stubDir := t.TempDir()
@@ -34,16 +37,23 @@ esac
 	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	bashStub := `#!/bin/sh
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(stubDir, "bash"), []byte(bashStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
 	return logPath
 }
 
 func TestRedispatch_StopThenRespawn(t *testing.T) {
 	logPath := stubScionForRedispatch(t, "r1", "researcher")
-	t.Setenv("DARKEN_SPAWN_READY_TIMEOUT", "100ms")
+	t.Setenv("DARKEN_SPAWN_READY_TIMEOUT", "2s")
 
-	err := runRedispatch([]string{"r1"})
-	_ = err
+	if err := runRedispatch([]string{"r1"}); err != nil {
+		t.Fatalf("runRedispatch returned error: %v", err)
+	}
 
 	body, _ := os.ReadFile(logPath)
 	got := string(body)
