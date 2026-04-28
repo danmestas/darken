@@ -16,6 +16,20 @@ type check struct {
 }
 
 func runDoctor(args []string) error {
+	// New: --init triggers per-init scaffold verification (Phase 6).
+	for _, a := range args {
+		if a == "--init" {
+			root, err := repoRoot()
+			if err != nil {
+				return err
+			}
+			report, err := runInitDoctor(root)
+			fmt.Print(report)
+			return err
+		}
+	}
+
+	// Existing dispatch follows below — no change.
 	if len(args) >= 1 {
 		report, err := doctorHarness(args[0])
 		fmt.Println(report)

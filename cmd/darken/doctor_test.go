@@ -151,6 +151,21 @@ func TestInitDoctor_FailsOnMissingSkills(t *testing.T) {
 	}
 }
 
+func TestDoctor_InitFlagDispatchesToInitDoctor(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+	// minimal init: just CLAUDE.md, missing skills → doctor --init should FAIL
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("# darken\n"), 0o644)
+
+	out, err := captureStdout(func() error { return runDoctor([]string{"--init"}) })
+	if err == nil {
+		t.Fatalf("expected runDoctor --init to fail with missing skills; got nil err\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "orchestrator-mode") {
+		t.Fatalf("expected output to call out missing orchestrator-mode skill, got: %s", out)
+	}
+}
+
 func TestInitDoctor_FailsOnMissingStatusLine(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
