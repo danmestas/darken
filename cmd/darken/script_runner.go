@@ -48,6 +48,10 @@ func extractSubstrateScript(substratePath string) (path string, cleanup func(), 
 // Uses the bash on PATH (not /bin/bash) so test stubs that prepend a
 // fake bash to PATH work. Future hardening to /bin/bash would require
 // updating spawn_test.go's bash stub strategy.
+//
+// Sets DARKEN_REPO_ROOT in the script's env so scripts can locate the
+// operator's working repo even when extracted to a tmpdir. Scripts
+// like stage-skills.sh use this to find harness manifests.
 func runSubstrateScript(substratePath string, args []string) error {
 	tmpPath, cleanup, err := extractSubstrateScript(substratePath)
 	if err != nil {
@@ -58,6 +62,7 @@ func runSubstrateScript(substratePath string, args []string) error {
 	c := exec.Command("bash", append([]string{tmpPath}, args...)...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
+	c.Env = scriptEnv()
 	return c.Run()
 }
 
@@ -71,6 +76,20 @@ func runSubstrateScriptCaptured(substratePath string, args []string) (string, er
 	}
 	defer cleanup()
 
-	out, err := exec.Command("bash", append([]string{tmpPath}, args...)...).CombinedOutput()
+	c := exec.Command("bash", append([]string{tmpPath}, args...)...)
+	c.Env = scriptEnv()
+	out, err := c.CombinedOutput()
 	return string(out), err
+}
+
+// scriptEnv returns the parent environment plus DARKEN_REPO_ROOT
+// pointing at the resolved operator working repo (best-effort; if
+// repoRoot fails, leaves DARKEN_REPO_ROOT unset so scripts fall back
+// to BASH_SOURCE-relative resolution).
+func scriptEnv() []string {
+	env := os.Environ()
+	if root, err := repoRoot(); err == nil {
+		env = append(env, "DARKEN_REPO_ROOT="+root)
+	}
+	return env
 }
