@@ -33,6 +33,7 @@ var subcommands = []subcommand{
 	{"orchestrate", "print host-mode orchestrator skill body", runOrchestrate},
 	{"redispatch", "kill + re-spawn an agent with the same role", runRedispatch},
 	{"init", "scaffold CLAUDE.md in a target dir", runInit},
+	{"upgrade-init", "refresh project scaffolds against the binary's substrate, then verify", runUpgradeInit},
 	{"version", "print binary version + embedded substrate hash", runVersion},
 	{"status", "print one-line status (statusLine-friendly)", runStatus},
 	{"dashboard", "open scion's web UI in the default browser", runDashboard},
