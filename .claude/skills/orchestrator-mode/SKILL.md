@@ -214,6 +214,18 @@ You yourself replace the `orchestrator` role for the duration of this session. T
 
 `bin/darken doctor` runs the full preflight; `bin/darken doctor <harness>` runs per-harness preflight + post-mortem (maps known errors to remediations).
 
+## Recovery policy
+
+If a sub-harness hangs (no progress for 10 minutes; detect via `scion look <name>` heartbeat or session log), redispatch automatically:
+
+1. **First hang:** call `darken redispatch <name>` and continue. The agent's worktree at `.scion/agents/<name>/` is preserved across the redispatch — committed work survives, in-flight uncommitted edits are acceptable to lose.
+2. **Second hang on the same agent:** call `darken redispatch <name>` again, but flag the recurrence in the audit log (`type: escalate`, `axis: reversibility`, payload includes the redispatch count).
+3. **Third hang:** stop redispatching. Escalate to the operator with the failure trace from `scion look <name> --logs`. The operator decides whether to redispatch a fourth time, change tactics, or abort the task.
+
+The 3-strikes ceiling is deliberate: a worker that hangs three times in a row is signal that the task is mis-specified or the harness is misbehaving. Continued auto-redispatch wastes operator attention by burying the underlying problem.
+
+After every redispatch (whether terminal or not), append an audit entry with `type: dispatch`, `outcome: ratified`, payload including `target_role`, `agent_name`, and a note that this was a redispatch (e.g. `payload.redispatch_of: "<previous decision_id>"`). This makes `darken history` show the recovery loop.
+
 ## What this skill is NOT
 
 - Not a substitute for the containerized `.scion/templates/orchestrator/` system-prompt — that one runs in a container; this one runs in your host session.
