@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 )
 
 func runSpawn(args []string) error {
@@ -28,16 +27,11 @@ func runSpawn(args []string) error {
 	}
 	posArgs := fs.Args()
 
-	root, err := repoRoot()
-	if err != nil {
-		return err
-	}
-
 	if !*noStage {
-		if err := runShell(filepath.Join(root, "scripts", "stage-creds.sh"), "all"); err != nil {
+		if err := runSubstrateScript("scripts/stage-creds.sh", []string{"all"}); err != nil {
 			fmt.Fprintln(os.Stderr, "spawn: stage-creds non-fatal:", err)
 		}
-		if err := runShell(filepath.Join(root, "scripts", "stage-skills.sh"), *harnessType); err != nil {
+		if err := runSubstrateScript("scripts/stage-skills.sh", []string{*harnessType}); err != nil {
 			return fmt.Errorf("stage-skills failed: %w", err)
 		}
 	}
@@ -59,6 +53,10 @@ func runSpawn(args []string) error {
 
 // runShell invokes a shell script via bash. Stdout/stderr are inherited
 // so the user sees script progress in-place.
+//
+// TODO: remove once all callers (bootstrap.go, creds.go, skills.go,
+// apply.go) migrate to runSubstrateScript via subsequent Phase 5
+// tasks. Spawn.go is the first migration; bootstrap.go is Task 2.
 func runShell(script string, args ...string) error {
 	c := exec.Command("bash", append([]string{script}, args...)...)
 	c.Stdout = os.Stdout

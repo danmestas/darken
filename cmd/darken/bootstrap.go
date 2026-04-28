@@ -3,9 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 func runBootstrap(args []string) error {
@@ -56,11 +59,7 @@ func ensureImages() error {
 }
 
 func ensureHubSecrets() error {
-	root, err := repoRoot()
-	if err != nil {
-		return err
-	}
-	return runShell(filepath.Join(root, "scripts", "stage-creds.sh"), "all")
+	return runSubstrateScript("scripts/stage-creds.sh", []string{"all"})
 }
 
 // ensureAllSkillsStaged runs stage-skills.sh per harness directory.
@@ -73,14 +72,42 @@ func ensureAllSkillsStaged() error {
 	}
 	dirs, err := os.ReadDir(filepath.Join(root, ".scion", "templates"))
 	if err != nil {
-		return err
+		// Any ReadDir failure (missing dir, permission denied, etc.) falls
+		// through to embedded. Permission-denied is unexpected here but
+		// safe to treat as "no project templates" — the operator's binary
+		// always carries a complete embedded substrate.
+		return ensureAllSkillsStagedFromEmbedded()
 	}
 	for _, d := range dirs {
 		if !d.IsDir() || d.Name() == "base" {
 			continue
 		}
-		if err := runShell(filepath.Join(root, "scripts", "stage-skills.sh"), d.Name()); err != nil {
+		if err := runSubstrateScript("scripts/stage-skills.sh", []string{d.Name()}); err != nil {
 			fmt.Fprintf(os.Stderr, "bootstrap: stage-skills %s failed: %v\n", d.Name(), err)
+		}
+	}
+	return nil
+}
+
+// ensureAllSkillsStagedFromEmbedded iterates the embedded .scion/templates/
+// list when the working repo has no project-local templates dir.
+//
+// Returns the fs.ReadDir error directly (vs the project-layer path
+// which swallows per-template stage-skills errors). An embedded read
+// failure indicates a corrupt binary, which is fatal and should
+// surface; per-template failures are operator-config issues that
+// shouldn't abort the whole bootstrap.
+func ensureAllSkillsStagedFromEmbedded() error {
+	entries, err := fs.ReadDir(substrate.EmbeddedFS(), "data/.scion/templates")
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == "base" {
+			continue
+		}
+		if err := runSubstrateScript("scripts/stage-skills.sh", []string{e.Name()}); err != nil {
+			fmt.Fprintf(os.Stderr, "bootstrap: stage-skills %s failed: %v\n", e.Name(), err)
 		}
 	}
 	return nil
