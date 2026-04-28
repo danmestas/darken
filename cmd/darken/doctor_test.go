@@ -257,3 +257,27 @@ func TestInitDoctor_FailsOnMissingStatusLine(t *testing.T) {
 		t.Fatalf("report should call out missing statusLine config: %s", report)
 	}
 }
+
+func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
+	// Stub scion to exit non-zero so checkScion fails.
+	stubDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"),
+		[]byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Stub docker too so checkDocker doesn't fail with a different
+	// error pattern that distracts from the test.
+	if err := os.WriteFile(filepath.Join(stubDir, "docker"),
+		[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	report, err := doctorBroad()
+	if err == nil {
+		t.Fatal("expected doctor to fail when scion is broken")
+	}
+	if !strings.Contains(report, "darken setup") {
+		t.Fatalf("failure report should mention `darken setup`:\n%s", report)
+	}
+}

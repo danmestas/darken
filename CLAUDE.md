@@ -6,7 +6,7 @@ You are running inside the Darkish Factory orchestration substrate. By default i
 
 ## Substrate
 
-- **`bin/darken`** (build with `make darken`) — operator CLI: `spawn`, `doctor`, `bootstrap`, `apply`, `creds`, `skills`, `images`, `list`, `orchestrate`. The `darken orchestrate` subcommand prints the orchestrator skill body for piping into a fresh session.
+- **`bin/darken`** (build with `make darken`) — operator CLI. See README's CLI Reference for the full surface (~19 commands across Lifecycle / Operations / Inspection / Targeted setup / Authoring). The `darken orchestrate` subcommand prints the orchestrator skill body for piping into a fresh session.
 - **`.scion/templates/<role>/`** — 13 harness manifests. The `orchestrator` template is for the containerized orchestrator deployment (Mode A); host mode (Mode B, this CLAUDE.md) uses the skill instead.
 - **`.scion/skills-staging/<role>/`** — per-harness skill bundles, mounted read-only into containers.
 - **`scion server` must be running.** `scion list` shows live agents.
@@ -33,10 +33,11 @@ The `caveman` skill (mounted in every container; available globally on host) gov
 ## Operator-side quick reference
 
 ```bash
-# One-time setup (run from this repo root — c.Dir bug, see PR #2 review)
-scion server start
-bin/darken creds            # push hub secrets (claude_auth, codex_auth)
-bin/darken bootstrap        # stage skills for every harness; build images if missing
+# One-time setup (new project)
+darken setup
+
+# After `brew upgrade darken`
+darken upgrade-init
 
 # In a Claude Code session here, you (orchestrator) dispatch via:
 bin/darken spawn researcher-1 --type researcher "produce a brief on X"
