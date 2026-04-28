@@ -163,3 +163,78 @@ func TestInitSecondRunIsIdempotent(t *testing.T) {
 		t.Fatalf("second init mutated .gitignore (not idempotent):\nwas: %q\nnow: %q", body1, body2)
 	}
 }
+
+func TestInitRefresh_PreservesCLAUDE(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	// Initial init creates the scaffold.
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+	// Operator customizes CLAUDE.md.
+	customCLAUDE := "# Custom CLAUDE.md\n\nMy own content here.\n"
+	if err := os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte(customCLAUDE), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// --refresh should NOT overwrite CLAUDE.md.
+	if err := runInit([]string{"--refresh", tmp}); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(tmp, "CLAUDE.md"))
+	if string(got) != customCLAUDE {
+		t.Fatalf("CLAUDE.md should be preserved, got:\n%s", got)
+	}
+}
+
+func TestInitRefresh_UpdatesSkills(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+	// Operator stomps on a skill with stale content.
+	skillPath := filepath.Join(tmp, ".claude", "skills", "orchestrator-mode", "SKILL.md")
+	if err := os.WriteFile(skillPath, []byte("STALE CONTENT"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// --refresh should re-extract from embedded substrate.
+	if err := runInit([]string{"--refresh", tmp}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := os.ReadFile(skillPath)
+	if string(got) == "STALE CONTENT" {
+		t.Fatal("skill body should have been refreshed from embedded substrate")
+	}
+	if !strings.Contains(string(got), "name: orchestrator-mode") {
+		t.Fatalf("refreshed skill missing frontmatter: %s", string(got)[:100])
+	}
+}
+
+func TestInitRefreshForce_OverwritesCLAUDE(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+	customCLAUDE := "# Custom\n"
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte(customCLAUDE), 0o644)
+
+	// --refresh --force regenerates CLAUDE.md.
+	if err := runInit([]string{"--refresh", "--force", tmp}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(tmp, "CLAUDE.md"))
+	if string(got) == customCLAUDE {
+		t.Fatal("--refresh --force should regenerate CLAUDE.md")
+	}
+	if !strings.Contains(string(got), "darken orchestrator-mode") {
+		t.Fatalf("regenerated CLAUDE.md missing template content: %s", got)
+	}
+}
