@@ -70,9 +70,14 @@ func runInit(args []string) error {
 		return nil
 	}
 
-	// Write each artifact.
+	// Write each artifact. CLAUDE.md is critical (hard fail); other
+	// artifacts are best-effort (log + continue) — matches the
+	// pre-refactor contract.
 	for _, art := range arts {
 		if err := writeArtifact(target, art, writeCLAUDE, *refresh); err != nil {
+			if art.RelPath == "CLAUDE.md" {
+				return fmt.Errorf("write CLAUDE.md: %w", err)
+			}
 			fmt.Fprintf(os.Stderr, "init: %s: %v\n", art.RelPath, err)
 		}
 	}
