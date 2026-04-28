@@ -14,7 +14,7 @@
 
 REGISTRY         ?= local
 TAG              ?= latest
-AGENT_INFRA_PATH ?= $(HOME)/projects/agent-infra
+BONES_SOURCE_PATH ?= $(HOME)/projects/bones
 
 # prebuild-bones: cross-compile the unified bones CLI for linux/arm64.
 # Required before running `make claude` because agent-infra and its dependency
@@ -31,7 +31,7 @@ prebuild-bones:
 	# agent-tasks pair) don't get COPY'd into the Docker image.
 	rm -rf claude/bin codex/bin pi/bin gemini/bin
 	mkdir -p claude/bin codex/bin pi/bin gemini/bin
-	cd $(AGENT_INFRA_PATH) && \
+	cd $(BONES_SOURCE_PATH) && \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/claude/bin/bones ./cmd/bones && \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/codex/bin/bones ./cmd/bones && \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(CURDIR)/pi/bin/bones ./cmd/bones && \
