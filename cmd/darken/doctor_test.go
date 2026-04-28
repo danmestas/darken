@@ -92,3 +92,94 @@ func TestDoctorHarnessPostMortemMapsAuthError(t *testing.T) {
 		t.Fatalf("post-mortem should map auth error to stage-creds remediation, got %q", report)
 	}
 }
+
+func TestInitDoctor_PassesOnCompleteInit(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	// Plant a complete init scaffold (matches what Phase 5's runInit produces).
+	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode"), 0o755)
+	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "subagent-to-subharness"), 0o755)
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("# darken orchestrator-mode\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode", "SKILL.md"),
+		[]byte("---\nname: orchestrator-mode\n---\n# body\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".claude", "skills", "subagent-to-subharness", "SKILL.md"),
+		[]byte("---\nname: subagent-to-subharness\n---\n# body\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".claude", "settings.local.json"),
+		[]byte(`{"statusLine":{"command":"darken status","type":"command"}}`), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".gitignore"),
+		[]byte(".scion/agents/\n.scion/skills-staging/\n.scion/audit.jsonl\n.claude/worktrees/\n"), 0o644)
+
+	report, err := runInitDoctor(tmp)
+	if err != nil {
+		t.Fatalf("expected init doctor to pass on complete scaffold; got: %v\nreport:\n%s", err, report)
+	}
+	for _, want := range []string{"OK", "CLAUDE.md", "orchestrator-mode", "subagent-to-subharness", "statusLine", ".gitignore"} {
+		if !strings.Contains(report, want) {
+			t.Fatalf("report missing %q:\n%s", want, report)
+		}
+	}
+}
+
+func TestInitDoctor_FailsOnMissingCLAUDE(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+	// no CLAUDE.md planted
+	report, err := runInitDoctor(tmp)
+	if err == nil {
+		t.Fatalf("expected error when CLAUDE.md missing")
+	}
+	if !strings.Contains(report, "CLAUDE.md") {
+		t.Fatalf("report should call out CLAUDE.md: %s", report)
+	}
+	if !strings.Contains(report, "darken init") {
+		t.Fatalf("report should suggest `darken init`: %s", report)
+	}
+}
+
+func TestInitDoctor_FailsOnMissingSkills(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("# darken\n"), 0o644)
+	// skills NOT scaffolded
+	report, err := runInitDoctor(tmp)
+	if err == nil {
+		t.Fatalf("expected error when skills missing")
+	}
+	if !strings.Contains(report, "orchestrator-mode") {
+		t.Fatalf("report should call out orchestrator-mode skill: %s", report)
+	}
+}
+
+func TestDoctor_InitFlagDispatchesToInitDoctor(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+	// minimal init: just CLAUDE.md, missing skills → doctor --init should FAIL
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("# darken\n"), 0o644)
+
+	out, err := captureStdout(func() error { return runDoctor([]string{"--init"}) })
+	if err == nil {
+		t.Fatalf("expected runDoctor --init to fail with missing skills; got nil err\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "orchestrator-mode") {
+		t.Fatalf("expected output to call out missing orchestrator-mode skill, got: %s", out)
+	}
+}
+
+func TestInitDoctor_FailsOnMissingStatusLine(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("# darken\n"), 0o644)
+	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode"), 0o755)
+	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "subagent-to-subharness"), 0o755)
+	os.WriteFile(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode", "SKILL.md"), []byte("name: orchestrator-mode"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".claude", "skills", "subagent-to-subharness", "SKILL.md"), []byte("name: subagent-to-subharness"), 0o644)
+	// no settings.local.json planted
+	report, err := runInitDoctor(tmp)
+	if err == nil {
+		t.Fatalf("expected error when settings.local.json missing")
+	}
+	if !strings.Contains(report, "statusLine") && !strings.Contains(report, "settings.local.json") {
+		t.Fatalf("report should call out missing statusLine config: %s", report)
+	}
+}

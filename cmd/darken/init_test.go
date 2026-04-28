@@ -8,6 +8,7 @@ import (
 )
 
 func TestInitScaffoldsCLAUDE(t *testing.T) {
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 
@@ -29,6 +30,7 @@ func TestInitScaffoldsCLAUDE(t *testing.T) {
 }
 
 func TestInitIsIdempotent(t *testing.T) {
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 
@@ -42,6 +44,7 @@ func TestInitIsIdempotent(t *testing.T) {
 }
 
 func TestInitForceOverwrites(t *testing.T) {
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 
@@ -68,6 +71,7 @@ func TestInitForceOverwrites(t *testing.T) {
 }
 
 func TestInitDryRun(t *testing.T) {
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 
@@ -83,22 +87,22 @@ func TestInitDryRun(t *testing.T) {
 	}
 }
 
-// stubBones plants a no-op bones script at the front of PATH so
-// runBonesInit finds an executable and treats it as installed but
-// the script does nothing destructive in the test's tmp dir.
-func stubBones(t *testing.T) {
+// stubPrereqs plants no-op bones/scion/docker stubs on PATH for tests
+// that don't care about prereq checks (just want runInit to proceed).
+func stubPrereqs(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	body := "#!/usr/bin/env bash\nexit 0\n"
-	path := filepath.Join(dir, "bones")
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
+	stubDir := t.TempDir()
+	for _, b := range []string{"bones", "scion", "docker"} {
+		if err := os.WriteFile(filepath.Join(stubDir, b),
+			[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", stubDir)
 }
 
 func TestInitScaffoldsSkills(t *testing.T) {
-	stubBones(t)
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 	if err := runInit([]string{tmp}); err != nil {
@@ -113,7 +117,7 @@ func TestInitScaffoldsSkills(t *testing.T) {
 }
 
 func TestInitWritesStatusLineSettings(t *testing.T) {
-	stubBones(t)
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 	if err := runInit([]string{tmp}); err != nil {
@@ -129,7 +133,7 @@ func TestInitWritesStatusLineSettings(t *testing.T) {
 }
 
 func TestInitAppendsGitignore(t *testing.T) {
-	stubBones(t)
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 	// Plant a pre-existing .gitignore to confirm append (not overwrite).
@@ -148,7 +152,7 @@ func TestInitAppendsGitignore(t *testing.T) {
 }
 
 func TestInitSecondRunIsIdempotent(t *testing.T) {
-	stubBones(t)
+	stubPrereqs(t)
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 	if err := runInit([]string{tmp}); err != nil {
@@ -161,5 +165,159 @@ func TestInitSecondRunIsIdempotent(t *testing.T) {
 	body2, _ := os.ReadFile(filepath.Join(tmp, ".gitignore"))
 	if string(body1) != string(body2) {
 		t.Fatalf("second init mutated .gitignore (not idempotent):\nwas: %q\nnow: %q", body1, body2)
+	}
+}
+
+func TestInitRefresh_PreservesCLAUDE(t *testing.T) {
+	stubPrereqs(t)
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	// Initial init creates the scaffold.
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+	// Operator customizes CLAUDE.md.
+	customCLAUDE := "# Custom CLAUDE.md\n\nMy own content here.\n"
+	if err := os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte(customCLAUDE), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// --refresh should NOT overwrite CLAUDE.md.
+	if err := runInit([]string{"--refresh", tmp}); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(tmp, "CLAUDE.md"))
+	if string(got) != customCLAUDE {
+		t.Fatalf("CLAUDE.md should be preserved, got:\n%s", got)
+	}
+}
+
+func TestInitRefresh_UpdatesSkills(t *testing.T) {
+	stubPrereqs(t)
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+	// Operator stomps on a skill with stale content.
+	skillPath := filepath.Join(tmp, ".claude", "skills", "orchestrator-mode", "SKILL.md")
+	if err := os.WriteFile(skillPath, []byte("STALE CONTENT"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// --refresh should re-extract from embedded substrate.
+	if err := runInit([]string{"--refresh", tmp}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := os.ReadFile(skillPath)
+	if string(got) == "STALE CONTENT" {
+		t.Fatal("skill body should have been refreshed from embedded substrate")
+	}
+	if !strings.Contains(string(got), "name: orchestrator-mode") {
+		t.Fatalf("refreshed skill missing frontmatter: %s", string(got)[:100])
+	}
+}
+
+func TestInitRefreshForce_OverwritesCLAUDE(t *testing.T) {
+	stubPrereqs(t)
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+	customCLAUDE := "# Custom\n"
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte(customCLAUDE), 0o644)
+
+	// --refresh --force regenerates CLAUDE.md.
+	if err := runInit([]string{"--refresh", "--force", tmp}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(tmp, "CLAUDE.md"))
+	if string(got) == customCLAUDE {
+		t.Fatal("--refresh --force should regenerate CLAUDE.md")
+	}
+	if !strings.Contains(string(got), "darken orchestrator-mode") {
+		t.Fatalf("regenerated CLAUDE.md missing template content: %s", got)
+	}
+}
+
+func TestInit_FailsFastWhenBonesMissing(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	// Replace PATH with a tmp dir that has scion + docker stubs but NO bones.
+	stubDir := t.TempDir()
+	for _, b := range []string{"scion", "docker"} {
+		os.WriteFile(filepath.Join(stubDir, b), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	}
+	t.Setenv("PATH", stubDir)
+
+	err := runInit([]string{tmp})
+	if err == nil {
+		t.Fatal("expected init to fail when bones missing from PATH")
+	}
+	if !strings.Contains(err.Error(), "bones") {
+		t.Fatalf("error should mention bones: %v", err)
+	}
+	if !strings.Contains(err.Error(), "brew install") {
+		t.Fatalf("error should suggest install hint: %v", err)
+	}
+}
+
+func TestInit_FailsFastWhenScionMissing(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	stubDir := t.TempDir()
+	for _, b := range []string{"bones", "docker"} {
+		os.WriteFile(filepath.Join(stubDir, b), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	}
+	t.Setenv("PATH", stubDir)
+
+	err := runInit([]string{tmp})
+	if err == nil {
+		t.Fatal("expected init to fail when scion missing")
+	}
+	if !strings.Contains(err.Error(), "scion") {
+		t.Fatalf("error should mention scion: %v", err)
+	}
+}
+
+func TestInit_FailsFastWhenDockerMissing(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	stubDir := t.TempDir()
+	for _, b := range []string{"bones", "scion"} {
+		os.WriteFile(filepath.Join(stubDir, b), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	}
+	t.Setenv("PATH", stubDir)
+
+	err := runInit([]string{tmp})
+	if err == nil {
+		t.Fatal("expected init to fail when docker missing")
+	}
+	if !strings.Contains(err.Error(), "docker") {
+		t.Fatalf("error should mention docker: %v", err)
+	}
+}
+
+func TestInit_PassesWhenAllPrereqsPresent(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	stubDir := t.TempDir()
+	for _, b := range []string{"bones", "scion", "docker"} {
+		os.WriteFile(filepath.Join(stubDir, b), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	}
+	t.Setenv("PATH", stubDir)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatalf("init should pass with all prereqs on PATH: %v", err)
 	}
 }

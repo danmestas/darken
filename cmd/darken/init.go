@@ -17,7 +17,13 @@ func runInit(args []string) error {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	dryRun := flags.Bool("dry-run", false, "print actions without executing")
 	force := flags.Bool("force", false, "overwrite existing CLAUDE.md")
+	refresh := flags.Bool("refresh", false, "re-scaffold skills/statusLine/.gitignore without clobbering CLAUDE.md (use --force with --refresh to also regenerate CLAUDE.md)")
 	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	// Phase 6: prereq check — fail fast if bones/scion/docker missing.
+	if err := verifyInitPrereqs(); err != nil {
 		return err
 	}
 
@@ -41,18 +47,36 @@ func runInit(args []string) error {
 		exists = true
 	}
 
+	// Decision matrix for whether to write CLAUDE.md.
+	// --refresh + --force: explicit regeneration → write
+	// --refresh alone:     preserve operator customizations → skip
+	// initial init + --force:  force overwrite → write
+	// initial init + exists:   skip (preserve existing)
+	// initial init + missing:  write
+	var writeCLAUDE bool
+	switch {
+	case *refresh && *force:
+		writeCLAUDE = true
+	case *refresh:
+		writeCLAUDE = false
+	case *force:
+		writeCLAUDE = true
+	case !exists:
+		writeCLAUDE = true
+	default:
+		writeCLAUDE = false
+	}
+
 	if *dryRun {
-		if exists && !*force {
-			fmt.Printf("would skip %s (already exists; use --force to overwrite)\n", claudePath)
-		} else {
+		if writeCLAUDE {
 			fmt.Printf("would create %s\n", claudePath)
+		} else {
+			fmt.Printf("would skip %s (already exists; use --force to overwrite)\n", claudePath)
 		}
 		return nil
 	}
 
-	if exists && !*force {
-		fmt.Printf("skipped %s (already exists; use --force to overwrite)\n", claudePath)
-	} else {
+	if writeCLAUDE {
 		body, err := renderCLAUDE(target)
 		if err != nil {
 			return err
@@ -61,6 +85,12 @@ func runInit(args []string) error {
 			return err
 		}
 		fmt.Printf("wrote %s\n", claudePath)
+	} else if exists {
+		if *refresh {
+			fmt.Printf("preserved %s (use --refresh --force to regenerate)\n", claudePath)
+		} else {
+			fmt.Printf("skipped %s (already exists; use --force to overwrite)\n", claudePath)
+		}
 	}
 
 	// Scaffold skills (project-local copies of the embedded host-mode skills)
