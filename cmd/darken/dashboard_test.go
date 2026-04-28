@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -49,7 +50,14 @@ Components:
   Hub API:         running
 `
 	stubScionServerStatus(t, statusOut)
-	logPath := stubOpener(t, "open")
+	// runDashboard picks the opener by GOOS: `open` on macOS, `xdg-open`
+	// on Linux. Mirror that here so the test exercises the same path
+	// the production code takes on the runner OS.
+	openerName := "open"
+	if runtime.GOOS == "linux" {
+		openerName = "xdg-open"
+	}
+	logPath := stubOpener(t, openerName)
 
 	if err := runDashboard(nil); err != nil {
 		t.Fatalf("dashboard failed: %v", err)
