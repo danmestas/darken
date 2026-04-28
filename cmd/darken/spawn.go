@@ -64,14 +64,34 @@ func runSpawn(args []string) error {
 		}
 	}
 
-	// Poll for ready (or error / timeout). Print one-line progress to stderr.
-	fmt.Fprintf(os.Stderr, "[spawning %s] container starting\n", name)
-	phase, err := pollUntilReady(name, timeout, 500*time.Millisecond)
+	// Operator-visible labels per scion lifecycle phase. The "running"
+	// phase is omitted intentionally — runSpawn prints the final
+	// "ready (X.Xs)" line itself with elapsed time.
+	phaseLabels := map[string]string{
+		"created":      "queued",
+		"provisioning": "provisioning",
+		"cloning":      "cloning workspace",
+		"starting":     "container starting",
+	}
+
+	// Poll for ready (or error / timeout). Per-phase progress goes to
+	// stderr via the callback; the final ready line is printed below.
+	start := time.Now()
+	phase, err := pollUntilReady(name, timeout, 500*time.Millisecond, func(p string) {
+		if p == "running" {
+			return // runSpawn prints the final "ready (X.Xs)" line
+		}
+		label, ok := phaseLabels[p]
+		if !ok {
+			label = p
+		}
+		fmt.Fprintf(os.Stderr, "[spawning %s] %s\n", name, label)
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[spawning %s] FAILED at phase=%s — %v\n", name, phase, err)
 		return fmt.Errorf("agent %s did not reach ready: %w", name, err)
 	}
-	fmt.Fprintf(os.Stderr, "[spawning %s] ready\n", name)
+	fmt.Fprintf(os.Stderr, "[spawning %s] ready (%.1fs)\n", name, time.Since(start).Seconds())
 	return nil
 }
 

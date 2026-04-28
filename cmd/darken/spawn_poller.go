@@ -22,10 +22,14 @@ type agentInfo struct {
 //
 // timeout: max wall-clock to wait. interval: time between polls.
 //
+// onPhaseChange is invoked once per distinct phase observed (skipped if
+// nil). Call sites use this to print progress to stderr without
+// polluting the poller with formatting concerns.
+//
 // Caller is expected to have already invoked `scion start <name> ...`
 // before calling pollUntilReady — this function only watches for the
 // state transition; it doesn't dispatch the agent itself.
-func pollUntilReady(agentName string, timeout, interval time.Duration) (string, error) {
+func pollUntilReady(agentName string, timeout, interval time.Duration, onPhaseChange func(phase string)) (string, error) {
 	deadline := time.Now().Add(timeout)
 	var lastPhase string
 	for {
@@ -39,6 +43,9 @@ func pollUntilReady(agentName string, timeout, interval time.Duration) (string, 
 			}
 			if a.Phase != lastPhase {
 				lastPhase = a.Phase
+				if onPhaseChange != nil {
+					onPhaseChange(a.Phase)
+				}
 			}
 			switch a.Phase {
 			case "running":
