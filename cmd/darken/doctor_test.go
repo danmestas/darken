@@ -1,11 +1,85 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/danmestas/darken/internal/substrate"
 )
+
+// plantOrchestratorSkill writes the embedded orchestrator-mode SKILL.md
+// (or a custom body) to <root>/.claude/skills/orchestrator-mode/SKILL.md
+// and sets DARKEN_REPO_ROOT to root. Returns the file path.
+func plantOrchestratorSkill(t *testing.T, body string) (root, skillPath string) {
+	t.Helper()
+	root = t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	skillDir := filepath.Join(root, ".claude", "skills", "orchestrator-mode")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	skillPath = filepath.Join(skillDir, "SKILL.md")
+	if err := os.WriteFile(skillPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root, skillPath
+}
+
+// readEmbeddedOrchestratorSkill returns the embedded SKILL.md body —
+// useful for the "in-sync" test case.
+func readEmbeddedOrchestratorSkill(t *testing.T) string {
+	t.Helper()
+	body, err := fs.ReadFile(substrate.EmbeddedFS(), "data/skills/orchestrator-mode/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+func TestSubstrateDrift_InSync(t *testing.T) {
+	embedded := readEmbeddedOrchestratorSkill(t)
+	plantOrchestratorSkill(t, embedded)
+
+	out, err := checkSubstrateDrift()
+	if err != nil {
+		t.Fatalf("expected nil error on in-sync, got %v", err)
+	}
+	if !strings.Contains(out, "in sync") {
+		t.Fatalf("expected 'in sync', got: %s", out)
+	}
+}
+
+func TestSubstrateDrift_Diverged(t *testing.T) {
+	plantOrchestratorSkill(t, "# orchestrator-mode\n\nwildly different body\n")
+
+	out, err := checkSubstrateDrift()
+	if err != nil {
+		t.Fatalf("drift should not error (warning only), got %v", err)
+	}
+	if !strings.Contains(out, "drift") {
+		t.Fatalf("expected drift warning, got: %s", out)
+	}
+	if !strings.Contains(out, "darken upgrade-init") {
+		t.Fatalf("expected remediation hint, got: %s", out)
+	}
+}
+
+func TestSubstrateDrift_SkillMissing(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	// Don't plant the skill.
+
+	out, err := checkSubstrateDrift()
+	if err != nil {
+		t.Fatalf("missing skill should not error, got %v", err)
+	}
+	if !strings.Contains(out, "not initialized") && !strings.Contains(out, "darken init") {
+		t.Fatalf("expected init hint, got: %s", out)
+	}
+}
 
 func TestDoctorReportsMissingScion(t *testing.T) {
 	dir := t.TempDir()

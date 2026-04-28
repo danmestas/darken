@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +42,34 @@ func runDoctor(args []string) error {
 	return err
 }
 
+// checkSubstrateDrift compares the project's orchestrator-mode SKILL.md
+// against the embedded copy. Returns a single human-readable line
+// describing one of three states (in sync / drift / not initialized).
+//
+// This is a WARN-level check — it never returns a non-nil error — so
+// drift doesn't make `darken doctor` exit 1. Operators routinely
+// customize their orchestrator loop; we only nudge them to refresh
+// when they explicitly ran `brew upgrade darken` and forgot.
+func checkSubstrateDrift() (string, error) {
+	root, err := repoRoot()
+	if err != nil {
+		return "SKIP  substrate drift — not in an init'd repo (run `darken init`)\n", nil
+	}
+	projectPath := filepath.Join(root, ".claude", "skills", "orchestrator-mode", "SKILL.md")
+	projectBody, err := os.ReadFile(projectPath)
+	if err != nil {
+		return "SKIP  substrate drift — project skill not initialized at " + projectPath + " (run `darken init`)\n", nil
+	}
+	embeddedBody, err := fs.ReadFile(substrate.EmbeddedFS(), "data/skills/orchestrator-mode/SKILL.md")
+	if err != nil {
+		return "", fmt.Errorf("embedded skill read failed: %w", err)
+	}
+	if bytes.Equal(projectBody, embeddedBody) {
+		return "OK    substrate skills in sync with binary\n", nil
+	}
+	return "WARN  substrate drift — project's orchestrator-mode/SKILL.md differs from binary (run `darken upgrade-init` to refresh)\n", nil
+}
+
 func doctorBroad() (string, error) {
 	checks := []check{
 		{"docker daemon reachable", checkDocker},
@@ -60,6 +90,16 @@ func doctorBroad() (string, error) {
 			fmt.Fprintf(&sb, "OK    %s\n", c.name)
 		}
 	}
+
+	// Substrate-skill drift check (WARN-only — does not contribute to failed).
+	driftLine, err := checkSubstrateDrift()
+	if err != nil {
+		fmt.Fprintf(&sb, "FAIL  substrate drift — %v\n", err)
+		failed = append(failed, "substrate drift")
+	} else {
+		sb.WriteString(driftLine)
+	}
+
 	if len(failed) > 0 {
 		return sb.String(), fmt.Errorf("%d checks failed: %s", len(failed), strings.Join(failed, ", "))
 	}
