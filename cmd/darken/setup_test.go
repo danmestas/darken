@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -167,5 +168,84 @@ func TestSetup_AbortsOnInitFailure(t *testing.T) {
 	body, _ := os.ReadFile(logPath)
 	if strings.Contains(string(body), "scion server status") {
 		t.Fatalf("bootstrap should not have been called after init failure:\n%s", body)
+	}
+}
+
+// TestSetup_UploadsAllTemplatesToHub confirms runSetup calls scion to push
+// all 14 canonical templates to the Hub at user (global) scope.
+func TestSetup_UploadsAllTemplatesToHub(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	stubAllBinariesForSetup(t)
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(prev) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+
+	// Intercept scion invocations to record args.
+	// Hub secret list must return expected secrets so finalDoctor passes.
+	var scionInvocations [][]string
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		scionInvocations = append(scionInvocations, append([]string{}, args...))
+		if len(args) >= 3 && args[0] == "hub" && args[1] == "secret" && args[2] == "list" {
+			return exec.Command("printf", "claude_auth\ncodex_auth\n")
+		}
+		return exec.Command("true")
+	}
+
+	if err := runSetup(nil); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	// Verify every canonical role was pushed with --global flag.
+	pushed := map[string]bool{}
+	for _, inv := range scionInvocations {
+		// Look for: --global templates push <role>
+		if len(inv) >= 4 && inv[0] == "--global" && inv[1] == "templates" && inv[2] == "push" {
+			pushed[inv[3]] = true
+		}
+	}
+	for _, role := range canonicalRoles {
+		if !pushed[role] {
+			t.Errorf("expected scion --global templates push %s to be called, but it was not", role)
+		}
+	}
+}
+
+// TestSetup_TemplateUploadFailureAbortsSetup confirms that a template upload
+// error propagates and aborts setup.
+func TestSetup_TemplateUploadFailureAbortsSetup(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	stubAllBinariesForSetup(t)
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(prev) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		// Fail on any templates push.
+		if len(args) >= 3 && args[1] == "templates" && args[2] == "push" {
+			return exec.Command("false")
+		}
+		return exec.Command("true")
+	}
+
+	if err := runSetup(nil); err == nil {
+		t.Fatal("expected setup to fail when template upload fails")
 	}
 }
