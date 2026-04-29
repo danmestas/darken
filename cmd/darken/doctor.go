@@ -14,9 +14,23 @@ import (
 	"github.com/danmestas/darken/internal/substrate"
 )
 
-type check struct {
-	name string
-	run  func() error
+// Severity constants for DoctorCheck. Fail checks contribute to the overall
+// failure count and cause doctor to exit 1. Warn checks are reported but do
+// not cause a non-zero exit.
+const (
+	SeverityFail = "fail"
+	SeverityWarn = "warn"
+)
+
+// DoctorCheck is a single preflight check with all its metadata inlined.
+// Using a registry of DoctorCheck values replaces the old stringly-typed
+// remediationFor dispatch.
+type DoctorCheck struct {
+	ID          string       // machine-readable identifier (stable across versions)
+	Label       string       // human-readable label printed in the report
+	Severity    string       // SeverityFail or SeverityWarn
+	Run         func() error // returns nil on success, non-nil on failure
+	Remediation string       // inline remediation hint; used when Run() returns non-nil
 }
 
 func runDoctor(args []string) error {
@@ -48,10 +62,8 @@ func runDoctor(args []string) error {
 // against the embedded copy. Returns a single human-readable line
 // describing one of three states (in sync / drift / not initialized).
 //
-// This is a WARN-level check — it never returns a non-nil error — so
-// drift doesn't make `darken doctor` exit 1. Operators routinely
-// customize their orchestrator loop; we only nudge them to refresh
-// when they explicitly ran `brew upgrade darken` and forgot.
+// Kept for backward compatibility with tests that assert specific output
+// strings. New code uses checkSubstrateDriftErr.
 func checkSubstrateDrift() (string, error) {
 	root, err := repoRoot()
 	if err != nil {
@@ -72,46 +84,116 @@ func checkSubstrateDrift() (string, error) {
 	return "WARN  substrate drift — project's orchestrator-mode/SKILL.md differs from binary (run `darken upgrade-init` to refresh)\n", nil
 }
 
-func doctorBroad() (string, error) {
-	checks := []check{
-		{"docker daemon reachable", checkDocker},
-		{"scion CLI present", checkScion},
-		{"scion server status", checkScionServer},
-		{"scion daemon liveness", checkScionServerLiveness},
-		{"go-git FUSE compatibility", checkGoGitFUSE},
-		{"hub secrets present", checkHubSecrets},
-		{"darken images built", checkImages},
+// checkSubstrateDriftErr is the DoctorCheck-compatible variant of
+// checkSubstrateDrift: returns nil when in sync or not initialized,
+// non-nil error when drift is detected.
+func checkSubstrateDriftErr() error {
+	root, err := repoRoot()
+	if err != nil {
+		return nil // not in an init'd repo — not an error
 	}
+	projectPath := filepath.Join(root, ".claude", "skills", "orchestrator-mode", "SKILL.md")
+	projectBody, err := os.ReadFile(projectPath)
+	if err != nil {
+		return nil // not initialized — SKIP, not WARN
+	}
+	embeddedBody, err := fs.ReadFile(substrate.EmbeddedFS(), "data/skills/orchestrator-mode/SKILL.md")
+	if err != nil {
+		return fmt.Errorf("embedded skill read failed: %w", err)
+	}
+	if bytes.Equal(projectBody, embeddedBody) {
+		return nil
+	}
+	return fmt.Errorf("project orchestrator-mode/SKILL.md differs from binary (run darken upgrade-init to refresh)")
+}
 
+// doctorBroadChecks returns the ordered registry of broad preflight checks.
+// Each DoctorCheck carries its own remediation string; no external dispatch.
+func doctorBroadChecks() []DoctorCheck {
+	return []DoctorCheck{
+		{
+			ID:          "docker-daemon",
+			Label:       "docker daemon reachable",
+			Severity:    SeverityFail,
+			Run:         checkDocker,
+			Remediation: "start Docker Desktop / podman / colima",
+		},
+		{
+			ID:          "scion-cli",
+			Label:       "scion CLI present",
+			Severity:    SeverityFail,
+			Run:         checkScion,
+			Remediation: "make install in ~/projects/scion",
+		},
+		{
+			ID:          "scion-server-status",
+			Label:       "scion server status",
+			Severity:    SeverityFail,
+			Run:         checkScionServer,
+			Remediation: "scion server start",
+		},
+		{
+			ID:          "scion-daemon-liveness",
+			Label:       "scion daemon liveness",
+			Severity:    SeverityFail,
+			Run:         checkScionServerLiveness,
+			Remediation: "scion server start",
+		},
+		{
+			ID:          "go-git-fuse",
+			Label:       "go-git FUSE compatibility",
+			Severity:    SeverityFail,
+			Run:         checkGoGitFUSE,
+			Remediation: "clone the grove outside the Docker Desktop shared volume",
+		},
+		{
+			ID:          "hub-secrets",
+			Label:       "hub secrets present",
+			Severity:    SeverityFail,
+			Run:         checkHubSecrets,
+			Remediation: "scripts/stage-creds.sh",
+		},
+		{
+			ID:          "darken-images",
+			Label:       "darken images built",
+			Severity:    SeverityFail,
+			Run:         checkImages,
+			Remediation: "make -C images",
+		},
+		{
+			ID:          "substrate-drift",
+			Label:       "substrate skills in sync with binary",
+			Severity:    SeverityWarn,
+			Run:         checkSubstrateDriftErr,
+			Remediation: "darken upgrade-init",
+		},
+		{
+			ID:          "hosts-docker-internal",
+			Label:       "host.docker.internal in /etc/hosts",
+			Severity:    SeverityWarn,
+			Run:         checkHostsDockerInternal,
+			Remediation: `echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts`,
+		},
+	}
+}
+
+func doctorBroad() (string, error) {
 	var sb strings.Builder
 	var failed []string
-	for _, c := range checks {
-		if err := c.run(); err != nil {
-			fmt.Fprintf(&sb, "FAIL  %s — %v\n", c.name, err)
-			fmt.Fprintf(&sb, "      remediation: %s\n", remediationFor(c.name, err))
-			failed = append(failed, c.name)
-		} else {
-			fmt.Fprintf(&sb, "OK    %s\n", c.name)
+
+	for _, dc := range doctorBroadChecks() {
+		err := dc.Run()
+		switch {
+		case err == nil:
+			fmt.Fprintf(&sb, "OK    %s\n", dc.Label)
+		case dc.Severity == SeverityWarn:
+			fmt.Fprintf(&sb, "WARN  %s — %v\n", dc.Label, err)
+			fmt.Fprintf(&sb, "      remediation: %s\n", dc.Remediation)
+		default:
+			fmt.Fprintf(&sb, "FAIL  %s — %v\n", dc.Label, err)
+			fmt.Fprintf(&sb, "      remediation: %s\n", dc.Remediation)
+			failed = append(failed, dc.ID)
 		}
-	}
-
-	// Substrate-skill drift check (WARN-only — does not contribute to failed).
-	driftLine, err := checkSubstrateDrift()
-	if err != nil {
-		fmt.Fprintf(&sb, "FAIL  substrate drift — %v\n", err)
-		failed = append(failed, "substrate drift")
-	} else {
-		sb.WriteString(driftLine)
-	}
-
-	// host.docker.internal /etc/hosts check (WARN-only — Linux CI boxes
-	// do not populate this entry; it is only mandatory on Mac Docker Desktop).
-	const hostsCheckName = "host.docker.internal in /etc/hosts"
-	if hostsErr := checkHostsDockerInternal(); hostsErr != nil {
-		fmt.Fprintf(&sb, "WARN  %s — %v\n", hostsCheckName, hostsErr)
-		fmt.Fprintf(&sb, "      remediation: %s\n", remediationFor(hostsCheckName, hostsErr))
-	} else {
-		fmt.Fprintf(&sb, "OK    %s\n", hostsCheckName)
 	}
 
 	if len(failed) > 0 {
@@ -287,40 +369,6 @@ func checkImages() error {
 	return nil
 }
 
-// remediationFor returns the §9 failure-mode remediation hint for a
-// failed check. Dispatches on the structured check name, not the
-// error message, so a future error-string change can't silently break
-// the mapping.
-func remediationFor(check string, err error) string {
-	switch check {
-	case "docker daemon reachable":
-		return "start Docker Desktop / podman / colima"
-	case "scion CLI present":
-		return "make install in ~/projects/scion"
-	case "scion server status", "scion daemon liveness":
-		return "scion server start"
-	case "host.docker.internal in /etc/hosts":
-		return `echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts`
-	case "hub secrets present", "secret":
-		return "scripts/stage-creds.sh"
-	case "darken images built", "image":
-		return "make -C images"
-	case "staging", "staging-mismatch":
-		return "darken skills <harness>"
-	}
-	// Fallback for callers passing free-form check names.
-	if err != nil {
-		msg := err.Error()
-		switch {
-		case strings.Contains(msg, "is a directory") || strings.Contains(msg, "directory symlink"):
-			return "Switch to copy-staging via `darken skills <harness>` (never use directory symlinks)"
-		case strings.Contains(msg, "caveman tier mismatch"):
-			return "Update <harness>/system-prompt.md Communication section; flag to darwin"
-		}
-	}
-	return "see spec §9 failure modes"
-}
-
 func doctorHarness(name string) (string, error) {
 	root, err := repoRoot()
 	if err != nil {
@@ -352,8 +400,7 @@ func doctorHarness(name string) (string, error) {
 
 	imgTag := imageTagFor(backend)
 	if !imageExists(imgTag) {
-		fmt.Fprintf(&sb, "FAIL  image %s missing — remediation: %s\n",
-			imgTag, remediationFor("image", fmt.Errorf("missing image: %s", imgTag)))
+		fmt.Fprintf(&sb, "FAIL  image %s missing — remediation: make -C images\n", imgTag)
 		failed = append(failed, "image")
 	} else {
 		fmt.Fprintf(&sb, "OK    image %s present\n", imgTag)
@@ -363,8 +410,7 @@ func doctorHarness(name string) (string, error) {
 	{
 		out, _ := defaultScionClient.SecretList()
 		if !strings.Contains(out, wantSecret) {
-			fmt.Fprintf(&sb, "FAIL  hub secret %s missing — remediation: %s\n",
-				wantSecret, remediationFor("secret", fmt.Errorf("missing hub secret: %s", wantSecret)))
+			fmt.Fprintf(&sb, "FAIL  hub secret %s missing — remediation: scripts/stage-creds.sh\n", wantSecret)
 			failed = append(failed, "secret")
 		} else {
 			fmt.Fprintf(&sb, "OK    hub secret %s present\n", wantSecret)
@@ -373,15 +419,14 @@ func doctorHarness(name string) (string, error) {
 
 	stageDir := filepath.Join(root, ".scion", "skills-staging", name)
 	if _, err := os.Stat(stageDir); err != nil {
-		fmt.Fprintf(&sb, "FAIL  skills-staging dir missing at %s — remediation: %s\n",
-			stageDir, remediationFor("staging", fmt.Errorf("skills-staging missing: %s", stageDir)))
+		fmt.Fprintf(&sb, "FAIL  skills-staging dir missing at %s — remediation: darken skills %s\n", stageDir, name)
 		failed = append(failed, "staging")
 	} else {
 		stagingFailed := false
 		for _, ref := range skills {
 			n := ref[strings.LastIndex(ref, "/")+1:]
 			if _, err := os.Stat(filepath.Join(stageDir, n)); err != nil {
-				fmt.Fprintf(&sb, "FAIL  manifest declares %q but skills-staging is missing it\n", n)
+				fmt.Fprintf(&sb, "FAIL  manifest declares %q but skills-staging is missing it — remediation: darken skills %s\n", n, name)
 				failed = append(failed, "staging-mismatch")
 				stagingFailed = true
 			}
