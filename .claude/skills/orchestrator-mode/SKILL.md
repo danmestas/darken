@@ -10,6 +10,8 @@ description: >-
 type: skill
 targets:
   - claude-code
+roles:
+  - orchestrator
 category:
   primary: workflow
 ---
