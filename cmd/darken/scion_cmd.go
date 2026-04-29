@@ -7,6 +7,10 @@ import (
 
 const defaultHubEndpoint = "http://host.docker.internal:8080"
 
+// scionCmdFn is the package-level function used to construct scion commands.
+// It defaults to scionCmd and can be overridden in tests to record invocations.
+var scionCmdFn = scionCmd
+
 // scionCmd returns an *exec.Cmd for invoking scion with the given args.
 // It centralizes all scion invocations so env propagation is consistent:
 //   - SCION_HUB_ENDPOINT is set from DARKEN_HUB_ENDPOINT, defaulting

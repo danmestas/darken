@@ -50,7 +50,7 @@ func runSpawn(args []string) error {
 		cmd = append(cmd, "--attach")
 	}
 
-	c := exec.Command("scion", cmd...)
+	c := scionCmdFn(cmd)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 

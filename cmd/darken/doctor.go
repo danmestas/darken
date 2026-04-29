@@ -116,7 +116,7 @@ func checkDocker() error {
 }
 
 func checkScion() error {
-	out, err := exec.Command("scion", "--help").CombinedOutput()
+	out, err := scionCmdFn([]string{"--help"}).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("scion not on PATH: %s", string(out))
 	}
@@ -124,7 +124,7 @@ func checkScion() error {
 }
 
 func checkScionServer() error {
-	out, err := exec.Command("scion", "server", "status").CombinedOutput()
+	out, err := scionCmdFn([]string{"server", "status"}).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("server not running: %s", string(out))
 	}
@@ -132,7 +132,7 @@ func checkScionServer() error {
 }
 
 func checkHubSecrets() error {
-	out, err := exec.Command("scion", "hub", "secret", "list").CombinedOutput()
+	out, err := scionCmdFn([]string{"hub", "secret", "list"}).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("hub secret list: %s", string(out))
 	}
@@ -235,7 +235,7 @@ func doctorHarness(name string) (string, error) {
 		fmt.Fprintf(&sb, "FAIL  unknown backend %q in manifest\n", backend)
 		failed = append(failed, "backend")
 	} else {
-		out, _ := exec.Command("scion", "hub", "secret", "list").CombinedOutput()
+		out, _ := scionCmdFn([]string{"hub", "secret", "list"}).CombinedOutput()
 		if !strings.Contains(string(out), wantSecret) {
 			fmt.Fprintf(&sb, "FAIL  hub secret %s missing — remediation: %s\n",
 				wantSecret, remediationFor("secret", fmt.Errorf("missing hub secret: %s", wantSecret)))

@@ -3,6 +3,7 @@ package main
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -255,6 +256,53 @@ func TestInitDoctor_FailsOnMissingStatusLine(t *testing.T) {
 	}
 	if !strings.Contains(report, "statusLine") && !strings.Contains(report, "settings.local.json") {
 		t.Fatalf("report should call out missing statusLine config: %s", report)
+	}
+}
+
+// TestCheckScion_UsesScionCmdFn asserts checkScion routes through scionCmdFn.
+func TestCheckScion_UsesScionCmdFn(t *testing.T) {
+	called := false
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		called = true
+		// Return a no-op that exits 0.
+		return exec.Command("true")
+	}
+	_ = checkScion()
+	if !called {
+		t.Error("checkScion did not call scionCmdFn")
+	}
+}
+
+// TestCheckScionServer_UsesScionCmdFn asserts checkScionServer routes through scionCmdFn.
+func TestCheckScionServer_UsesScionCmdFn(t *testing.T) {
+	called := false
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		called = true
+		return exec.Command("true")
+	}
+	_ = checkScionServer()
+	if !called {
+		t.Error("checkScionServer did not call scionCmdFn")
+	}
+}
+
+// TestCheckHubSecrets_UsesScionCmdFn asserts checkHubSecrets routes through scionCmdFn.
+func TestCheckHubSecrets_UsesScionCmdFn(t *testing.T) {
+	called := false
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		called = true
+		// Return output containing the required secrets so check passes.
+		return exec.Command("printf", "claude_auth\ncodex_auth\n")
+	}
+	_ = checkHubSecrets()
+	if !called {
+		t.Error("checkHubSecrets did not call scionCmdFn")
 	}
 }
 

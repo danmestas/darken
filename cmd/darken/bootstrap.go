@@ -37,10 +37,10 @@ func runBootstrap(args []string) error {
 
 // ensureScionServer starts the scion server if not already running.
 func ensureScionServer() error {
-	if err := exec.Command("scion", "server", "status").Run(); err == nil {
+	if err := scionCmdFn([]string{"server", "status"}).Run(); err == nil {
 		return nil
 	}
-	return exec.Command("scion", "server", "start").Run()
+	return scionCmdFn([]string{"server", "start"}).Run()
 }
 
 // ensureImages builds any missing darken images via `make -C images <backend>`.

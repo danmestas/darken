@@ -2,10 +2,28 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// TestEnsureScionServer_UsesScionCmdFn asserts ensureScionServer routes
+// through scionCmdFn so hub-endpoint env propagation applies.
+func TestEnsureScionServer_UsesScionCmdFn(t *testing.T) {
+	called := false
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		called = true
+		// Simulate scion server status exits 0 (server running).
+		return exec.Command("true")
+	}
+	_ = ensureScionServer()
+	if !called {
+		t.Error("ensureScionServer did not call scionCmdFn")
+	}
+}
 
 func TestBootstrapStepsAreOrdered(t *testing.T) {
 	dir := t.TempDir()
