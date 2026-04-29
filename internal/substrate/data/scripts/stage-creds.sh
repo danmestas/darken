@@ -32,8 +32,14 @@ push_file_secret() {
     echo "stage-creds: scion CLI not on PATH; cannot push ${name}" >&2
     return 1
   fi
-  scion hub secret set --type file --target "${target}" "${name}" "@${src}" >/dev/null
-  echo "stage-creds: ${name} pushed (file → ${target})"
+  # Guard the success echo explicitly: set -e is suppressed inside functions
+  # called from an "|| true" context (POSIX), so check the exit code directly.
+  if scion hub secret set --type file --target "${target}" "${name}" "@${src}" >/dev/null; then
+    echo "stage-creds: ${name} pushed (file -> ${target})"
+  else
+    echo "stage-creds: ${name} push FAILED" >&2
+    return 1
+  fi
 }
 
 push_env_secret() {
@@ -43,9 +49,16 @@ push_env_secret() {
     return 1
   fi
   printf '%s' "${value}" > "${TMP_DIR}/${name}"
-  scion hub secret set --type env --target "${name}" "${name}" "@${TMP_DIR}/${name}" >/dev/null
-  rm -f "${TMP_DIR}/${name}"
-  echo "stage-creds: ${name} pushed (env)"
+  # Guard the success echo explicitly: set -e is suppressed inside functions
+  # called from an "|| true" context (POSIX), so check the exit code directly.
+  if scion hub secret set --type env --target "${name}" "${name}" "@${TMP_DIR}/${name}" >/dev/null; then
+    rm -f "${TMP_DIR}/${name}"
+    echo "stage-creds: ${name} pushed (env)"
+  else
+    rm -f "${TMP_DIR}/${name}"
+    echo "stage-creds: ${name} push FAILED" >&2
+    return 1
+  fi
 }
 
 stage_claude() {
