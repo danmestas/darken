@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 )
 
@@ -34,16 +33,8 @@ func runSpawn(args []string) error {
 		if err := runSubstrateScript("scripts/stage-creds.sh", []string{"all"}); err != nil {
 			fmt.Fprintln(os.Stderr, "spawn: stage-creds non-fatal:", err)
 		}
-		if err := runSubstrateScript("scripts/stage-skills.sh", []string{*harnessType}); err != nil {
-			return fmt.Errorf("stage-skills failed: %w", err)
-		}
-		// Strip skills not visible to the spawning role before container start.
-		// repoRoot failure is non-fatal: skills-staging may not exist anyway.
-		if root, err := repoRoot(); err == nil {
-			stagingDir := filepath.Join(root, ".scion", "skills-staging", *harnessType)
-			if ferr := filterSkillsForRole(stagingDir, *harnessType); ferr != nil {
-				fmt.Fprintf(os.Stderr, "spawn: skill filter non-fatal: %v\n", ferr)
-			}
+		if err := stageSkillsForRole(*harnessType); err != nil {
+			return fmt.Errorf("spawn: %w", err)
 		}
 	}
 
