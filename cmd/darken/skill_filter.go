@@ -44,22 +44,22 @@ func filterSkillsForRole(dir, role string) error {
 // skillVisibleToRole reports whether the skill directory is visible to role.
 // A skill is visible when its SKILL.md has no roles field, an empty roles
 // list, or lists role in its roles field.
+//
+// Non-skill directories (no SKILL.md) are always visible.
+// Any other I/O or parse error is returned to the caller.
 func skillVisibleToRole(dir, role string) (bool, error) {
 	path := filepath.Join(dir, "SKILL.md")
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		return true, nil // no SKILL.md -> keep (non-skill dir)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return true, nil // no SKILL.md -> non-skill dir, keep
 	}
+	meta, err := loadSkillMetadata(path)
 	if err != nil {
-		return true, nil // unreadable -> keep (non-fatal)
+		return false, err
 	}
-	defer f.Close()
-
-	roles, hasRoles, err := parseFrontmatterRoles(f)
-	if err != nil || !hasRoles || len(roles) == 0 {
-		return true, err // no roles constraint -> visible to all
+	if !meta.HasRoles || len(meta.Roles) == 0 {
+		return true, nil // no roles constraint -> visible to all
 	}
-	for _, r := range roles {
+	for _, r := range meta.Roles {
 		if r == role {
 			return true, nil
 		}
