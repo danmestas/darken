@@ -52,3 +52,17 @@ func TestSubagentToSubharnessSkill_SubharnessDefault(t *testing.T) {
 		}
 	}
 }
+
+// TestWritingPlansSkill_ExistsAndHasBonesRepo asserts Bug 12: the
+// vendor writing-plans skill exists in the embed and routes plan output
+// through the bones repo CI when BONES_REPO is set.
+func TestWritingPlansSkill_ExistsAndHasBonesRepo(t *testing.T) {
+	body, err := fs.ReadFile(EmbeddedFS(), "data/skills/writing-plans/SKILL.md")
+	if err != nil {
+		t.Fatalf("writing-plans vendor skill missing: %v", err)
+	}
+	s := string(body)
+	if !strings.Contains(s, "BONES_REPO") {
+		t.Error("writing-plans skill must reference BONES_REPO env var")
+	}
+}

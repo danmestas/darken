@@ -82,5 +82,6 @@ sync-embed-data:
 	done
 	cp -R .claude/skills/orchestrator-mode $(SUBSTRATE_DATA)/skills/
 	cp -R .claude/skills/subagent-to-subharness $(SUBSTRATE_DATA)/skills/
+	cp -R .claude/skills/writing-plans $(SUBSTRATE_DATA)/skills/
 	cp templates/CLAUDE.md.tmpl $(SUBSTRATE_DATA)/templates/
 	@echo "synced $(SUBSTRATE_DATA) from canonical sources"

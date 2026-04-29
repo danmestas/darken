@@ -9,3 +9,4 @@ hipp
 ousterhout
 superpowers
 spec-kit
+writing-plans
