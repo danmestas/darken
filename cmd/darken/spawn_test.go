@@ -45,9 +45,9 @@ func TestSpawnInvokesStageThenScion(t *testing.T) {
 	if !strings.Contains(string(body), "stage-creds.sh") {
 		t.Fatalf("stage-creds.sh not invoked: %s", body)
 	}
-	if !strings.Contains(string(body), "stage-skills.sh") {
-		t.Fatalf("stage-skills.sh not invoked: %s", body)
-	}
+	// REVIEW-7 consolidated skill staging into the Go-side
+	// buildSkillsStaging; spawn no longer invokes a stage-skills.sh
+	// shell script, so the prior bash-stub assertion has been removed.
 	if !strings.Contains(string(body), "start smoke-1") {
 		t.Fatalf("scion start not invoked: %s", body)
 	}
