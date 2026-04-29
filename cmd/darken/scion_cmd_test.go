@@ -54,6 +54,80 @@ func TestScionCmd_PropagatesRepoRoot(t *testing.T) {
 	}
 }
 
+func TestScionCmdEnv_PropagatesSkillsCanonical(t *testing.T) {
+	t.Setenv("DARKEN_SKILLS_CANONICAL", "/custom/path/skills")
+
+	cmd := scionCmd([]string{"list"})
+
+	found := false
+	for _, e := range cmd.Env {
+		if e == "DARKEN_SKILLS_CANONICAL=/custom/path/skills" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("DARKEN_SKILLS_CANONICAL=/custom/path/skills not in env; got: %v", cmd.Env)
+	}
+}
+
+func TestScionCmdEnv_DefaultsSkillsCanonical(t *testing.T) {
+	t.Setenv("DARKEN_SKILLS_CANONICAL", "")
+
+	cmd := scionCmd([]string{"list"})
+
+	var got string
+	for _, e := range cmd.Env {
+		if strings.HasPrefix(e, "DARKEN_SKILLS_CANONICAL=") {
+			got = e
+			break
+		}
+	}
+	if got == "" {
+		t.Fatalf("DARKEN_SKILLS_CANONICAL not set in env")
+	}
+	if got == "DARKEN_SKILLS_CANONICAL=" {
+		t.Errorf("DARKEN_SKILLS_CANONICAL should have a non-empty default; got empty string")
+	}
+}
+
+func TestScriptEnv_PropagatesSkillsCanonical(t *testing.T) {
+	t.Setenv("DARKEN_SKILLS_CANONICAL", "/another/path")
+
+	env := scriptEnv()
+
+	found := false
+	for _, e := range env {
+		if e == "DARKEN_SKILLS_CANONICAL=/another/path" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("DARKEN_SKILLS_CANONICAL=/another/path not in scriptEnv; got: %v", env)
+	}
+}
+
+func TestScriptEnv_DefaultsSkillsCanonical(t *testing.T) {
+	t.Setenv("DARKEN_SKILLS_CANONICAL", "")
+
+	env := scriptEnv()
+
+	var got string
+	for _, e := range env {
+		if strings.HasPrefix(e, "DARKEN_SKILLS_CANONICAL=") {
+			got = e
+			break
+		}
+	}
+	if got == "" {
+		t.Fatalf("DARKEN_SKILLS_CANONICAL not set in scriptEnv")
+	}
+	if got == "DARKEN_SKILLS_CANONICAL=" {
+		t.Errorf("DARKEN_SKILLS_CANONICAL should have a non-empty default; got empty string")
+	}
+}
+
 func TestScionCmd_ArgsForwardedVerbatim(t *testing.T) {
 	args := []string{"spawn", "name", "--type", "researcher", "do thing"}
 	cmd := scionCmd(args)
