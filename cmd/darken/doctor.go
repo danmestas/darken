@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/danmestas/darken/internal/substrate"
 )
@@ -75,6 +77,7 @@ func doctorBroad() (string, error) {
 		{"docker daemon reachable", checkDocker},
 		{"scion CLI present", checkScion},
 		{"scion server status", checkScionServer},
+		{"scion daemon liveness", checkScionServerLiveness},
 		{"hub secrets present", checkHubSecrets},
 		{"darken images built", checkImages},
 	}
@@ -128,6 +131,43 @@ func checkScionServer() error {
 	if err != nil {
 		return fmt.Errorf("server not running: %s", string(out))
 	}
+	return nil
+}
+
+// checkScionServerLiveness probes the scion daemon directly.
+// Primary: HTTP GET DARKEN_HUB_ENDPOINT/healthz (fast, works inside Docker).
+// Fallback: parse the "Daemon:" line from scion server status (works on host).
+func checkScionServerLiveness() error {
+	endpoint := os.Getenv("DARKEN_HUB_ENDPOINT")
+	if endpoint == "" {
+		endpoint = defaultHubEndpoint
+	}
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	resp, err := client.Get(endpoint + "/healthz")
+	if err == nil {
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return nil
+		}
+		return fmt.Errorf("scion daemon /healthz returned %d", resp.StatusCode)
+	}
+	// Healthz unreachable; fall through to daemon-line parse.
+	out, sErr := scionCmdFn([]string{"server", "status"}).CombinedOutput()
+	if sErr != nil {
+		return fmt.Errorf("scion server status: %w", sErr)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		t := strings.TrimSpace(line)
+		lower := strings.ToLower(t)
+		if !strings.HasPrefix(lower, "daemon:") {
+			continue
+		}
+		if strings.Contains(lower, "running") {
+			return nil
+		}
+		return fmt.Errorf("scion daemon not running: %s", t)
+	}
+	// No daemon line — accept the zero exit from scion server status.
 	return nil
 }
 
