@@ -23,7 +23,7 @@ set -euo pipefail
 # Direct invocation (`bash scripts/stage-skills.sh`) still works via the
 # BASH_SOURCE fallback.
 REPO="${DARKEN_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-CANONICAL="${HOME}/projects/agent-skills/skills"
+CANONICAL="${HOME}/projects/agent-config/skills"
 
 usage() {
   cat <<EOF >&2
