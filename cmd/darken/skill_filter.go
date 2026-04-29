@@ -29,7 +29,9 @@ func filterSkillsForRole(dir, role string) error {
 		skillDir := filepath.Join(dir, e.Name())
 		visible, ferr := skillVisibleToRole(skillDir, role)
 		if ferr != nil {
-			// Malformed frontmatter is non-fatal; keep the skill.
+			// Fail closed: SKILL.md exists but is malformed or unreadable.
+			// Remove the skill rather than granting inadvertent visibility.
+			_ = os.RemoveAll(skillDir) // best-effort; ignore remove error
 			continue
 		}
 		if !visible {
