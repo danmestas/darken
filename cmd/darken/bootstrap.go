@@ -152,7 +152,12 @@ func extractEmbeddedTemplates() (string, func(), error) {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(dst, body, 0o644)
+		// Substitute ${DARKEN_*} placeholders in scion-agent.yaml manifests.
+		content := string(body)
+		if strings.HasSuffix(path, "scion-agent.yaml") {
+			content = expandManifest(content)
+		}
+		return os.WriteFile(dst, []byte(content), 0o644)
 	})
 	if walkErr != nil {
 		cleanup()

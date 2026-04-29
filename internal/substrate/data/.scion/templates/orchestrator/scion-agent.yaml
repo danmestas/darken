@@ -15,4 +15,4 @@ volumes:
     target: /home/scion/skills/role/
     read_only: true
 hub:
-  endpoint: http://host.docker.internal:8080
+  endpoint: ${DARKEN_HUB_ENDPOINT}

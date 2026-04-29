@@ -9,4 +9,4 @@ max_turns: 30
 max_duration: "1h"
 detached: false
 hub:
-  endpoint: http://host.docker.internal:8080
+  endpoint: ${DARKEN_HUB_ENDPOINT}
