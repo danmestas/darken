@@ -78,6 +78,7 @@ func doctorBroad() (string, error) {
 		{"scion CLI present", checkScion},
 		{"scion server status", checkScionServer},
 		{"scion daemon liveness", checkScionServerLiveness},
+		{"go-git FUSE compatibility", checkGoGitFUSE},
 		{"hub secrets present", checkHubSecrets},
 		{"darken images built", checkImages},
 	}
@@ -168,6 +169,48 @@ func checkScionServerLiveness() error {
 		return fmt.Errorf("scion daemon not running: %s", t)
 	}
 	// No daemon line — accept the zero exit from scion server status.
+	return nil
+}
+
+// checkGoGitFUSE is the entry point: reads /proc/mounts and the cwd,
+// then delegates to checkGoGitFUSEMounts.
+func checkGoGitFUSE() error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	return checkGoGitFUSEMounts("/proc/mounts", cwd)
+}
+
+// checkGoGitFUSEMounts sniff-tests for Mac Docker Desktop fakeowner FUSE
+// mounts that are incompatible with go-git (used by sciontool internally).
+// Returns an error when cwd is on a FUSE filesystem; nil otherwise.
+// mountsPath and cwd are injectable for testing.
+func checkGoGitFUSEMounts(mountsPath, cwd string) error {
+	data, err := os.ReadFile(mountsPath)
+	if os.IsNotExist(err) {
+		return nil // /proc/mounts absent; skip
+	}
+	if err != nil {
+		return nil // unreadable; skip silently
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		mountPoint := fields[1]
+		fsType := strings.ToLower(fields[2])
+		if !strings.HasPrefix(cwd, mountPoint) {
+			continue
+		}
+		if strings.Contains(fsType, "fuse") || fsType == "virtiofs" {
+			return fmt.Errorf(
+				"workspace %q is on %s — go-git (used by sciontool) may fail; clone the grove outside the Docker Desktop shared volume",
+				cwd, fields[2],
+			)
+		}
+	}
 	return nil
 }
 
