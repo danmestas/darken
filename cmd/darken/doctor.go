@@ -337,15 +337,20 @@ func doctorHarness(name string) (string, error) {
 		}
 		return "", fmt.Errorf("manifest read: %w", err)
 	}
-	backend := scanField(string(body), "default_harness_config:")
-	skills := scanList(string(body), "skills:")
+	manifest, err := loadHarnessManifest(body)
+	if err != nil {
+		return fmt.Sprintf("FAIL  manifest parse for %s — %v\n", name, err),
+			fmt.Errorf("manifest parse: %w", err)
+	}
+	backend := manifest.Backend
+	skills := manifest.Skills
 
 	var sb strings.Builder
 	var failed []string
 
 	fmt.Fprintf(&sb, "OK    manifest %s served from %s layer\n", name, manifestLayer)
 
-	imgTag := fmt.Sprintf("local/darkish-%s:latest", backend)
+	imgTag := imageTagFor(backend)
 	if !imageExists(imgTag) {
 		fmt.Fprintf(&sb, "FAIL  image %s missing — remediation: %s\n",
 			imgTag, remediationFor("image", fmt.Errorf("missing image: %s", imgTag)))
@@ -354,14 +359,8 @@ func doctorHarness(name string) (string, error) {
 		fmt.Fprintf(&sb, "OK    image %s present\n", imgTag)
 	}
 
-	wantSecret := map[string]string{
-		"claude": "claude_auth", "codex": "codex_auth",
-		"pi": "OPENROUTER_API_KEY", "gemini": "gemini_auth",
-	}[backend]
-	if wantSecret == "" {
-		fmt.Fprintf(&sb, "FAIL  unknown backend %q in manifest\n", backend)
-		failed = append(failed, "backend")
-	} else {
+	wantSecret := harnessSecretFor(backend)
+	{
 		out, _ := scionCmdFn([]string{"hub", "secret", "list"}).CombinedOutput()
 		if !strings.Contains(string(out), wantSecret) {
 			fmt.Fprintf(&sb, "FAIL  hub secret %s missing — remediation: %s\n",
