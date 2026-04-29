@@ -412,6 +412,87 @@ func TestCheckScionServerLiveness_InDoctorBroad(t *testing.T) {
 	}
 }
 
+// B7: /etc/hosts host.docker.internal check.
+
+// TestCheckHostsDockerInternal_Present confirms no error when entry exists.
+func TestCheckHostsDockerInternal_Present(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.WriteString("127.0.0.1\tlocalhost\n")
+	f.WriteString("127.0.0.1\thost.docker.internal\n")
+
+	if err := checkHostsDockerInternalFile(f.Name()); err != nil {
+		t.Fatalf("expected nil when entry present, got: %v", err)
+	}
+}
+
+// TestCheckHostsDockerInternal_Missing confirms error with remediation when entry absent.
+func TestCheckHostsDockerInternal_Missing(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.WriteString("127.0.0.1\tlocalhost\n")
+	f.WriteString("::1\t\tlocalhost\n")
+
+	err = checkHostsDockerInternalFile(f.Name())
+	if err == nil {
+		t.Fatal("expected error when host.docker.internal missing from /etc/hosts")
+	}
+	if !strings.Contains(err.Error(), "host.docker.internal") {
+		t.Fatalf("error should name the missing host, got: %v", err)
+	}
+}
+
+// TestCheckHostsDockerInternal_CommentedLine confirms a commented-out entry
+// is not counted as present.
+func TestCheckHostsDockerInternal_CommentedLine(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.WriteString("# 127.0.0.1 host.docker.internal\n")
+
+	err = checkHostsDockerInternalFile(f.Name())
+	if err == nil {
+		t.Fatal("expected error: commented-out entry should not satisfy the check")
+	}
+}
+
+// TestCheckHostsDockerInternal_RemediationInReport confirms doctorBroad
+// includes the remediation text when the entry is missing.
+func TestCheckHostsDockerInternal_RemediationInReport(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// empty hosts file
+	f.Close()
+
+	// Override the hosts path via the injectable function.
+	orig := hostsFilePath
+	t.Cleanup(func() { hostsFilePath = orig })
+	hostsFilePath = f.Name()
+
+	stubDir := t.TempDir()
+	os.WriteFile(filepath.Join(stubDir, "scion"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	os.WriteFile(filepath.Join(stubDir, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	report, _ := doctorBroad()
+	if !strings.Contains(report, "host.docker.internal") {
+		t.Fatalf("report should mention host.docker.internal, got:\n%s", report)
+	}
+	if !strings.Contains(report, "sudo tee") {
+		t.Fatalf("report should include sudo tee remediation, got:\n%s", report)
+	}
+}
+
 // B5: go-git FUSE sniff-test.
 
 // TestCheckGoGitFUSE_CleanMount confirms no error on a non-FUSE mount.

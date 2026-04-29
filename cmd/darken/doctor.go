@@ -104,6 +104,16 @@ func doctorBroad() (string, error) {
 		sb.WriteString(driftLine)
 	}
 
+	// host.docker.internal /etc/hosts check (WARN-only — Linux CI boxes
+	// do not populate this entry; it is only mandatory on Mac Docker Desktop).
+	const hostsCheckName = "host.docker.internal in /etc/hosts"
+	if hostsErr := checkHostsDockerInternal(); hostsErr != nil {
+		fmt.Fprintf(&sb, "WARN  %s — %v\n", hostsCheckName, hostsErr)
+		fmt.Fprintf(&sb, "      remediation: %s\n", remediationFor(hostsCheckName, hostsErr))
+	} else {
+		fmt.Fprintf(&sb, "OK    %s\n", hostsCheckName)
+	}
+
 	if len(failed) > 0 {
 		sb.WriteString("\n→ for a fresh project, run `darken setup` to bring everything online\n")
 		return sb.String(), fmt.Errorf("%d checks failed: %s", len(failed), strings.Join(failed, ", "))
@@ -214,6 +224,38 @@ func checkGoGitFUSEMounts(mountsPath, cwd string) error {
 	return nil
 }
 
+// hostsFilePath is the path to the hosts file. Injectable for testing.
+var hostsFilePath = "/etc/hosts"
+
+// checkHostsDockerInternal verifies that host.docker.internal has an entry
+// in the hosts file. Required so the darken CLI (running on the host) can
+// reach the scion hub inside Docker Desktop.
+func checkHostsDockerInternal() error {
+	return checkHostsDockerInternalFile(hostsFilePath)
+}
+
+// checkHostsDockerInternalFile is the testable variant that accepts a custom
+// hosts file path.
+func checkHostsDockerInternalFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue // skip comments
+		}
+		if strings.Contains(trimmed, "host.docker.internal") {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"host.docker.internal not found in %s; add with: echo \"127.0.0.1 host.docker.internal\" | sudo tee -a %s",
+		path, path,
+	)
+}
+
 func checkHubSecrets() error {
 	out, err := scionCmdFn([]string{"hub", "secret", "list"}).CombinedOutput()
 	if err != nil {
@@ -255,8 +297,10 @@ func remediationFor(check string, err error) string {
 		return "start Docker Desktop / podman / colima"
 	case "scion CLI present":
 		return "make install in ~/projects/scion"
-	case "scion server status":
+	case "scion server status", "scion daemon liveness":
 		return "scion server start"
+	case "host.docker.internal in /etc/hosts":
+		return `echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts`
 	case "hub secrets present", "secret":
 		return "scripts/stage-creds.sh"
 	case "darken images built", "image":
