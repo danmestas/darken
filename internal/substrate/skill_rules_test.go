@@ -2,6 +2,7 @@ package substrate
 
 import (
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 )
@@ -64,5 +65,44 @@ func TestWritingPlansSkill_ExistsAndHasBonesRepo(t *testing.T) {
 	s := string(body)
 	if !strings.Contains(s, "BONES_REPO") {
 		t.Error("writing-plans skill must reference BONES_REPO env var")
+	}
+}
+
+// TestOrchestratorModeSkill_ArchitectureAxis asserts Bug 13: architecture
+// is the 4th deferral axis in the escalation gate alongside taste, ethics,
+// and reversibility. Both the orchestrator-mode and subagent-to-subharness
+// skills must reflect this. Both the canonical .claude/skills/ copies and
+// the embedded data/skills/ copies are checked.
+func TestOrchestratorModeSkill_ArchitectureAxis(t *testing.T) {
+	axes := []string{"taste", "ethics", "reversibility", "architecture"}
+	skills := []string{"orchestrator-mode", "subagent-to-subharness"}
+
+	// Embedded copies.
+	for _, skill := range skills {
+		body, err := fs.ReadFile(EmbeddedFS(), "data/skills/"+skill+"/SKILL.md")
+		if err != nil {
+			t.Fatalf("embedded %s skill missing: %v", skill, err)
+		}
+		s := string(body)
+		for _, axis := range axes {
+			if !strings.Contains(s, axis) {
+				t.Errorf("embedded %s skill missing deferral axis %q", skill, axis)
+			}
+		}
+	}
+
+	// Canonical source copies (../../.claude/skills/ relative to package).
+	for _, skill := range skills {
+		path := "../../.claude/skills/" + skill + "/SKILL.md"
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("canonical .claude/skills/%s/SKILL.md missing: %v", skill, err)
+		}
+		s := string(body)
+		for _, axis := range axes {
+			if !strings.Contains(s, axis) {
+				t.Errorf("canonical .claude/skills/%s missing deferral axis %q", skill, axis)
+			}
+		}
 	}
 }
