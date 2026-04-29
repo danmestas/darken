@@ -52,3 +52,49 @@ func TestBootstrapStepsAreOrdered(t *testing.T) {
 		pos = i
 	}
 }
+
+// TestEnsureBrokerProvide_UsesScionCmdFn asserts ensureBrokerProvide routes
+// through scionCmdFn with the correct arguments.
+func TestEnsureBrokerProvide_UsesScionCmdFn(t *testing.T) {
+	var gotArgs []string
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		gotArgs = args
+		return exec.Command("true")
+	}
+	if err := ensureBrokerProvide(); err != nil {
+		t.Fatalf("expected nil, got: %v", err)
+	}
+	if len(gotArgs) < 2 || gotArgs[0] != "broker" || gotArgs[1] != "provide" {
+		t.Fatalf("expected args [broker provide ...], got: %v", gotArgs)
+	}
+}
+
+// TestBootstrap_BrokerProvideStep confirms broker provide runs after the
+// scion server step and before the images step.
+func TestBootstrap_BrokerProvideStep(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "log")
+	scionBody := "#!/bin/sh\necho \"scion $@\" >> " + log + "\nexit 0\n"
+	dockerBody := "#!/bin/sh\necho \"docker $@\" >> " + log + "\nexit 0\n"
+	makeBody := "#!/bin/sh\necho \"make $@\" >> " + log + "\nexit 0\n"
+	bashBody := "#!/bin/sh\necho \"bash $@\" >> " + log + "\ncat \"$1\" >> " + log + "\n"
+	for name, body := range map[string]string{"scion": scionBody, "docker": dockerBody, "make": makeBody, "bash": bashBody} {
+		os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	_ = runBootstrap([]string{})
+
+	body, _ := os.ReadFile(log)
+	got := string(body)
+	if !strings.Contains(got, "broker provide") {
+		t.Fatalf("bootstrap should call scion broker provide, log:\n%s", got)
+	}
+	// broker provide must appear after server status check.
+	serverIdx := strings.Index(got, "server")
+	brokerIdx := strings.Index(got, "broker provide")
+	if brokerIdx < serverIdx {
+		t.Fatalf("broker provide must run after scion server check, log:\n%s", got)
+	}
+}

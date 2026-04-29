@@ -23,7 +23,9 @@ set -euo pipefail
 # Direct invocation (`bash scripts/stage-skills.sh`) still works via the
 # BASH_SOURCE fallback.
 REPO="${DARKEN_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-CANONICAL="${HOME}/projects/agent-config/skills"
+# DARKEN_SKILLS_CANONICAL is injected by the darken scion-cmd helper.
+# Direct invocations fall back to the standard agent-config layout.
+CANONICAL="${DARKEN_SKILLS_CANONICAL:-${HOME}/projects/agent-config/skills}"
 
 usage() {
   cat <<EOF >&2

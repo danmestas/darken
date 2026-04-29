@@ -82,14 +82,21 @@ func runSubstrateScriptCaptured(substratePath string, args []string) (string, er
 	return string(out), err
 }
 
-// scriptEnv returns the parent environment plus DARKEN_REPO_ROOT
-// pointing at the resolved operator working repo (best-effort; if
-// repoRoot fails, leaves DARKEN_REPO_ROOT unset so scripts fall back
-// to BASH_SOURCE-relative resolution).
+// scriptEnv returns the parent environment plus DARKEN_REPO_ROOT and
+// DARKEN_SKILLS_CANONICAL so substrate scripts always have a canonical
+// skills path available without requiring the caller to set env vars.
+//
+// DARKEN_REPO_ROOT: points at the resolved operator working repo
+// (best-effort; if repoRoot fails, leaves it unset so scripts fall
+// back to BASH_SOURCE-relative resolution).
+//
+// DARKEN_SKILLS_CANONICAL: canonical skills source directory, read
+// from the environment or defaulted to ~/projects/agent-config/skills.
 func scriptEnv() []string {
 	env := os.Environ()
 	if root, err := repoRoot(); err == nil {
-		env = append(env, "DARKEN_REPO_ROOT="+root)
+		env = envOverride(env, "DARKEN_REPO_ROOT", root)
 	}
+	env = envOverride(env, "DARKEN_SKILLS_CANONICAL", skillsCanonical())
 	return env
 }

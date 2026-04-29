@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -194,13 +195,24 @@ func statResult(path string) (os.FileInfo, bool) {
 // runBonesInit shells out to `bones init` in the target dir if bones is
 // on PATH. Soft-fail: bones being missing is not fatal — operator
 // without bones still gets a usable orchestrator session.
+//
+// If bones exits non-zero but its stderr contains "already initialized",
+// the workspace is already bootstrapped and the call is treated as a
+// clean no-op — no error is returned and no warning is emitted.
 func runBonesInit(targetDir string) error {
 	if _, err := exec.LookPath("bones"); err != nil {
 		return nil // soft-fail; bones not on PATH
 	}
+	var stderrBuf strings.Builder
 	c := exec.Command("bones", "init")
 	c.Dir = targetDir
 	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return c.Run()
+	c.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	if err := c.Run(); err != nil {
+		if strings.Contains(stderrBuf.String(), "already initialized") {
+			return nil // idempotent no-op
+		}
+		return err
+	}
+	return nil
 }
