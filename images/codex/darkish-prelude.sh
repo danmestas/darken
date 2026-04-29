@@ -74,8 +74,14 @@ fi
 # worktree spawns get a populated /workspace via host bind-mount.
 if [[ -n "${SCION_GIT_CLONE_URL:-}" && -n "${GITHUB_TOKEN:-}" && ! -d /workspace/.git ]]; then
   echo "darkish-prelude: pre-cloning workspace via shell git (sciontool go-git workaround)" >&2
-  AUTH_URL="https://x-access-token:${GITHUB_TOKEN}@${SCION_GIT_CLONE_URL#https://}"
-  if git clone --depth "${SCION_GIT_DEPTH:-1}" -b "${SCION_GIT_BRANCH:-main}" "${AUTH_URL}" /workspace 2>&1 | sed 's/x-access-token:[^@]*@/x-access-token:***@/g' >&2; then
+  # Build auth credentials without embedding the token in the clone URL.
+  # Passing credentials via -c http.extraheader keeps them out of the
+  # persisted /workspace/.git/config.
+  _B64_CREDS="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 | tr -d '\n')"
+  if git \
+      -c "http.extraheader=Authorization: Basic ${_B64_CREDS}" \
+      clone --depth "${SCION_GIT_DEPTH:-1}" -b "${SCION_GIT_BRANCH:-main}" \
+      "${SCION_GIT_CLONE_URL}" /workspace >&2; then
     echo "darkish-prelude: pre-clone complete" >&2
   else
     echo "darkish-prelude: pre-clone FAILED -- sciontool will likely fail too" >&2
