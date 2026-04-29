@@ -20,6 +20,19 @@ func captureStdout(fn func() error) (string, error) {
 	return string(body), err
 }
 
+// captureStderr runs fn with os.Stderr pointed at an in-memory pipe
+// and returns whatever fn wrote to stderr.
+func captureStderr(fn func() error) (string, error) {
+	r, w, _ := os.Pipe()
+	old := os.Stderr
+	os.Stderr = w
+	err := fn()
+	w.Close()
+	os.Stderr = old
+	body, _ := io.ReadAll(r)
+	return string(body), err
+}
+
 // captureCombined runs fn with both stdout and stderr pointed at
 // in-memory pipes and returns the concatenated output. Used by tests
 // that exercise multi-step subcommands writing to a mix of streams
