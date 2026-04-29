@@ -227,8 +227,12 @@ esac
 	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
 	t.Setenv("DARKEN_REPO_ROOT", repoRoot)
 
-	if err := runSpawn([]string{"filt-1", "--type", "researcher", "task"}); err != nil {
-		t.Fatalf("spawn: %v", err)
+	// REVIEW-7 consolidated staging into buildSkillsStaging which wipes and
+	// re-stages from manifest. This test verifies the filter step in
+	// isolation by calling filterSkillsForRole directly on the pre-populated
+	// dir; full-spawn integration is exercised by TestSpawnInvokesStageThenScion.
+	if err := filterSkillsForRole(stagingDir, "researcher"); err != nil {
+		t.Fatalf("filter: %v", err)
 	}
 
 	// visible-skill must remain (researcher is listed)
