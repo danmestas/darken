@@ -20,6 +20,7 @@ func runBootstrap(args []string) error {
 		{"docker daemon reachable", checkDocker},
 		{"scion CLI present", checkScion},
 		{"scion server running", ensureScionServer},
+		{"grove registered with broker", ensureBrokerProvide},
 		{"darken images built", ensureImages},
 		{"hub secrets pushed", ensureHubSecrets},
 		{"per-harness skills staged", ensureAllSkillsStaged},
@@ -41,6 +42,16 @@ func ensureScionServer() error {
 		return nil
 	}
 	return scionCmdFn([]string{"server", "start"}).Run()
+}
+
+// ensureBrokerProvide registers the current grove with the local broker so
+// agents can be dispatched here. Idempotent — scion broker provide is a
+// no-op when the grove is already registered.
+func ensureBrokerProvide() error {
+	cmd := scionCmdFn([]string{"broker", "provide"})
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // ensureImages builds any missing darken images via `make -C images <backend>`.
