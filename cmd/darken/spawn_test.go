@@ -117,3 +117,54 @@ esac
 		t.Fatalf("--watch should pass --attach to scion start: %s", body)
 	}
 }
+
+// TestRunSpawn_TaskAsPositional pins the v0.1.15 fix: positional words
+// after flags are forwarded verbatim to scion and no --notify flag is
+// injected by darken itself.
+func TestRunSpawn_TaskAsPositional(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls.log")
+
+	scionStub := `#!/bin/sh
+echo "$@" >> ` + log + `
+case "$1" in
+  start) exit 0 ;;
+  list)  echo '[{"name":"agentname","phase":"running"}]'; exit 0 ;;
+  *)     exit 0 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(dir, "scion"), []byte(scionStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bash"),
+		[]byte("#!/bin/sh\ncat \"$1\" >> /dev/null\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	if err := runSpawn([]string{"agentname", "--type", "researcher", "do the thing", "with multiple words"}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	body, _ := os.ReadFile(log)
+	got := string(body)
+
+	// Positional words must appear in the scion invocation.
+	if !strings.Contains(got, "do the thing") {
+		t.Errorf("posArg 'do the thing' not forwarded to scion: %s", got)
+	}
+	if !strings.Contains(got, "with multiple words") {
+		t.Errorf("posArg 'with multiple words' not forwarded to scion: %s", got)
+	}
+	// darken must NOT inject --notify into the scion call.
+	if strings.Contains(got, "--notify") {
+		t.Errorf("darken injected --notify flag into scion args: %s", got)
+	}
+}
+
+// TestRunSpawn_FailsWithoutType guards that --type is required.
+func TestRunSpawn_FailsWithoutType(t *testing.T) {
+	err := runSpawn([]string{"myagent"})
+	if err == nil {
+		t.Fatal("expected error when --type is missing, got nil")
+	}
+}
