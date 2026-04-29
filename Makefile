@@ -65,6 +65,13 @@ vendor-skills:
 		echo "vendor-skills: copied $$skill"; \
 	done < "$(SKILLS_MANIFEST)"
 
+# e2e-smoke runs the C5 integration smoke tests via the Go test runner.
+# Uses a fake scion binary in a temp dir; no containers are started.
+# Full container e2e is deferred to CI.
+.PHONY: e2e-smoke
+e2e-smoke:
+	go test -v -run TestSmoke ./cmd/darken/...
+
 .PHONY: sync-embed-data
 sync-embed-data:
 	rm -rf $(SUBSTRATE_DATA)
