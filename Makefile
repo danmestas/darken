@@ -38,6 +38,33 @@ sync-skills:
 #   - images/<backend>/bin/   (pre-built bones; gitignored, regenerable)
 SUBSTRATE_DATA := internal/substrate/data
 
+# Vendor substrate skills from DARKEN_SKILLS_SOURCE into
+# internal/substrate/data/skills/ for go:embed.  Skills authored
+# directly in this repo (superpowers, spec-kit) are committed and are
+# silently skipped when absent from DARKEN_SKILLS_SOURCE.
+#
+# Usage:
+#   make vendor-skills                              # uses default source
+#   make vendor-skills DARKEN_SKILLS_SOURCE=/path  # override source
+DARKEN_SKILLS_SOURCE ?= $(HOME)/projects/agent-config/skills
+SKILLS_MANIFEST     := internal/substrate/skills.manifest.txt
+
+.PHONY: vendor-skills
+vendor-skills:
+	@while IFS= read -r skill || [ -n "$$skill" ]; do \
+		[ -z "$$skill" ] && continue; \
+		case "$$skill" in \#*) continue ;; esac; \
+		src="$(DARKEN_SKILLS_SOURCE)/$$skill"; \
+		dst="$(SUBSTRATE_DATA)/skills/$$skill"; \
+		if [ ! -d "$$src" ]; then \
+			echo "vendor-skills: skip $$skill (not found at $$src)"; \
+			continue; \
+		fi; \
+		rm -rf "$$dst"; \
+		cp -R "$$src" "$$dst"; \
+		echo "vendor-skills: copied $$skill"; \
+	done < "$(SKILLS_MANIFEST)"
+
 .PHONY: sync-embed-data
 sync-embed-data:
 	rm -rf $(SUBSTRATE_DATA)
