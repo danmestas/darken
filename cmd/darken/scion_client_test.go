@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,13 +9,13 @@ import (
 
 // mockScionClient is a configurable ScionClient for unit tests.
 type mockScionClient struct {
-	serverStatusOut string
-	serverStatusErr error
-	secretListOut   string
-	secretListErr   error
-	startAgentErr   error
+	serverStatusOut  string
+	serverStatusErr  error
+	secretListOut    string
+	secretListErr    error
+	startAgentErr    error
 	brokerProvideErr error
-	pushTemplateErr error
+	pushTemplateErr  error
 
 	startAgentCalls   [][]string
 	pushTemplateCalls []string
@@ -48,22 +47,27 @@ func setDefaultClient(t *testing.T, c ScionClient) {
 	defaultScionClient = c
 }
 
-// TestCheckScion_UsesScionClient asserts checkScion routes through ScionClient.ServerStatus.
+// TestCheckScion_UsesScionClient asserts checkScion passes when scion binary is on PATH.
 func TestCheckScion_UsesScionClient(t *testing.T) {
-	mc := &mockScionClient{serverStatusOut: "Status: ok\n"}
-	setDefaultClient(t, mc)
+	stubDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"),
+		[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
 	if err := checkScion(); err != nil {
 		t.Fatalf("checkScion: %v", err)
 	}
 }
 
-// TestCheckScion_FailsWhenServerStatusErrors asserts checkScion fails when
-// ScionClient.ServerStatus returns an error.
-func TestCheckScion_FailsWhenServerStatusErrors(t *testing.T) {
-	mc := &mockScionClient{serverStatusErr: errors.New("scion not found")}
-	setDefaultClient(t, mc)
+// TestCheckScion_FailsWhenNotOnPath asserts checkScion fails when scion binary
+// is absent from PATH.
+func TestCheckScion_FailsWhenNotOnPath(t *testing.T) {
+	stubDir := t.TempDir()
+	// Empty dir: no scion binary present.
+	t.Setenv("PATH", stubDir)
 	if err := checkScion(); err == nil {
-		t.Fatal("expected error when ServerStatus errors, got nil")
+		t.Fatal("expected error when scion not on PATH, got nil")
 	}
 }
 

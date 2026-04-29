@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -263,6 +264,36 @@ func TestInitDoctor_FailsOnMissingStatusLine(t *testing.T) {
 // Note: TestCheckScion_UsesScionClient, TestCheckScionServer_UsesScionClient,
 // and TestCheckHubSecrets_UsesScionClient live in scion_client_test.go where
 // the mockScionClient infrastructure is defined.
+
+// TestCheckScion_CLIPresentDaemonDown verifies that when scion CLI is on PATH
+// but the daemon is unreachable, checkScion passes (CLI present) while the
+// broader doctor report emits the daemon-down message, not a CLI-missing message.
+func TestCheckScion_CLIPresentDaemonDown(t *testing.T) {
+	// Put a scion stub that exits 0 (CLI present) on PATH.
+	stubDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"),
+		[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	// checkScion must pass: CLI is present.
+	if err := checkScion(); err != nil {
+		t.Fatalf("checkScion should pass when scion binary is on PATH, got: %v", err)
+	}
+
+	// checkScionServer uses a mock that simulates daemon down.
+	setDefaultClient(t, &mockScionClient{
+		serverStatusErr: errors.New("connection refused"),
+	})
+	err := checkScionServer()
+	if err == nil {
+		t.Fatal("expected checkScionServer to fail when ServerStatus errors")
+	}
+	if strings.Contains(err.Error(), "not on PATH") {
+		t.Fatalf("daemon-down error must not say 'not on PATH', got: %v", err)
+	}
+}
 
 func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
 	// Stub scion to exit non-zero so checkScion fails.

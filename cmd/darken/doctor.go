@@ -212,9 +212,9 @@ func checkDocker() error {
 }
 
 func checkScion() error {
-	_, err := defaultScionClient.ServerStatus()
+	_, err := exec.LookPath("scion")
 	if err != nil {
-		return fmt.Errorf("scion not on PATH: %w", err)
+		return fmt.Errorf("scion not found on PATH: %w", err)
 	}
 	return nil
 }
