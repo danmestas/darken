@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -261,52 +260,9 @@ func TestInitDoctor_FailsOnMissingStatusLine(t *testing.T) {
 	}
 }
 
-// TestCheckScion_UsesScionCmdFn asserts checkScion routes through scionCmdFn.
-func TestCheckScion_UsesScionCmdFn(t *testing.T) {
-	called := false
-	orig := scionCmdFn
-	t.Cleanup(func() { scionCmdFn = orig })
-	scionCmdFn = func(args []string) *exec.Cmd {
-		called = true
-		// Return a no-op that exits 0.
-		return exec.Command("true")
-	}
-	_ = checkScion()
-	if !called {
-		t.Error("checkScion did not call scionCmdFn")
-	}
-}
-
-// TestCheckScionServer_UsesScionCmdFn asserts checkScionServer routes through scionCmdFn.
-func TestCheckScionServer_UsesScionCmdFn(t *testing.T) {
-	called := false
-	orig := scionCmdFn
-	t.Cleanup(func() { scionCmdFn = orig })
-	scionCmdFn = func(args []string) *exec.Cmd {
-		called = true
-		return exec.Command("true")
-	}
-	_ = checkScionServer()
-	if !called {
-		t.Error("checkScionServer did not call scionCmdFn")
-	}
-}
-
-// TestCheckHubSecrets_UsesScionCmdFn asserts checkHubSecrets routes through scionCmdFn.
-func TestCheckHubSecrets_UsesScionCmdFn(t *testing.T) {
-	called := false
-	orig := scionCmdFn
-	t.Cleanup(func() { scionCmdFn = orig })
-	scionCmdFn = func(args []string) *exec.Cmd {
-		called = true
-		// Return output containing the required secrets so check passes.
-		return exec.Command("printf", "claude_auth\ncodex_auth\n")
-	}
-	_ = checkHubSecrets()
-	if !called {
-		t.Error("checkHubSecrets did not call scionCmdFn")
-	}
-}
+// Note: TestCheckScion_UsesScionClient, TestCheckScionServer_UsesScionClient,
+// and TestCheckHubSecrets_UsesScionClient live in scion_client_test.go where
+// the mockScionClient infrastructure is defined.
 
 func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
 	// Stub scion to exit non-zero so checkScion fails.
@@ -361,11 +317,9 @@ func TestCheckScionServerLiveness_HealthzFailsFallsThroughToDaemonLine(t *testin
 	srv.Close()
 	t.Setenv("DARKEN_HUB_ENDPOINT", addr)
 
-	orig := scionCmdFn
-	t.Cleanup(func() { scionCmdFn = orig })
-	scionCmdFn = func(args []string) *exec.Cmd {
-		return exec.Command("printf", "Status: ok\\nDaemon: running (pid 42)\\nGroves: 1\\n")
-	}
+	setDefaultClient(t, &mockScionClient{
+		serverStatusOut: "Status: ok\nDaemon: running (pid 42)\nGroves: 1\n",
+	})
 
 	if err := checkScionServerLiveness(); err != nil {
 		t.Fatalf("expected nil when daemon line reports running, got: %v", err)
@@ -380,11 +334,9 @@ func TestCheckScionServerLiveness_DaemonStopped(t *testing.T) {
 	srv.Close()
 	t.Setenv("DARKEN_HUB_ENDPOINT", addr)
 
-	orig := scionCmdFn
-	t.Cleanup(func() { scionCmdFn = orig })
-	scionCmdFn = func(args []string) *exec.Cmd {
-		return exec.Command("printf", "Status: stopped\\nDaemon: stopped\\n")
-	}
+	setDefaultClient(t, &mockScionClient{
+		serverStatusOut: "Status: stopped\nDaemon: stopped\n",
+	})
 
 	if err := checkScionServerLiveness(); err == nil {
 		t.Fatal("expected error when daemon line reports stopped")

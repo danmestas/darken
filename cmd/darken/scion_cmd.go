@@ -18,17 +18,10 @@ func skillsCanonical() string {
 	return home + "/projects/agent-config/skills"
 }
 
-// scionCmdFn is the package-level function used to construct scion commands.
-// It defaults to scionCmd and can be overridden in tests to record invocations.
-var scionCmdFn = scionCmd
-
 // scionCmd returns an *exec.Cmd for invoking scion with the given args.
-// It centralizes all scion invocations so env propagation is consistent:
-//   - SCION_HUB_ENDPOINT is set from DARKEN_HUB_ENDPOINT, defaulting
-//     to http://host.docker.internal:8080 (preserves v0.1.15 behavior).
-//   - DARKEN_REPO_ROOT is set via the same logic as scriptEnv().
-//
-// Stdout and stderr are NOT wired — callers set them as needed.
+// Used by execScionClient (via scionCmdWithEnv) and by bootstrap's
+// server-start path, which is the one operation not represented on
+// ScionClient (start-server is a bootstrap-only imperative).
 func scionCmd(args []string) *exec.Cmd {
 	cmd := exec.Command("scion", args...)
 	cmd.Env = scionCmdEnv()

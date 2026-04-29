@@ -130,17 +130,17 @@ func checkDocker() error {
 }
 
 func checkScion() error {
-	out, err := scionCmdFn([]string{"--help"}).CombinedOutput()
+	_, err := defaultScionClient.ServerStatus()
 	if err != nil {
-		return fmt.Errorf("scion not on PATH: %s", string(out))
+		return fmt.Errorf("scion not on PATH: %w", err)
 	}
 	return nil
 }
 
 func checkScionServer() error {
-	out, err := scionCmdFn([]string{"server", "status"}).CombinedOutput()
+	_, err := defaultScionClient.ServerStatus()
 	if err != nil {
-		return fmt.Errorf("server not running: %s", string(out))
+		return fmt.Errorf("server not running: %w", err)
 	}
 	return nil
 }
@@ -163,11 +163,11 @@ func checkScionServerLiveness() error {
 		return fmt.Errorf("scion daemon /healthz returned %d", resp.StatusCode)
 	}
 	// Healthz unreachable; fall through to daemon-line parse.
-	out, sErr := scionCmdFn([]string{"server", "status"}).CombinedOutput()
+	out, sErr := defaultScionClient.ServerStatus()
 	if sErr != nil {
 		return fmt.Errorf("scion server status: %w", sErr)
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(out, "\n") {
 		t := strings.TrimSpace(line)
 		lower := strings.ToLower(t)
 		if !strings.HasPrefix(lower, "daemon:") {
@@ -257,12 +257,12 @@ func checkHostsDockerInternalFile(path string) error {
 }
 
 func checkHubSecrets() error {
-	out, err := scionCmdFn([]string{"hub", "secret", "list"}).CombinedOutput()
+	out, err := defaultScionClient.SecretList()
 	if err != nil {
-		return fmt.Errorf("hub secret list: %s", string(out))
+		return fmt.Errorf("hub secret list: %w", err)
 	}
 	for _, want := range []string{"claude_auth", "codex_auth"} {
-		if !strings.Contains(string(out), want) {
+		if !strings.Contains(out, want) {
 			return fmt.Errorf("missing hub secret: %s", want)
 		}
 	}
@@ -361,8 +361,8 @@ func doctorHarness(name string) (string, error) {
 
 	wantSecret := harnessSecretFor(backend)
 	{
-		out, _ := scionCmdFn([]string{"hub", "secret", "list"}).CombinedOutput()
-		if !strings.Contains(string(out), wantSecret) {
+		out, _ := defaultScionClient.SecretList()
+		if !strings.Contains(out, wantSecret) {
 			fmt.Fprintf(&sb, "FAIL  hub secret %s missing — remediation: %s\n",
 				wantSecret, remediationFor("secret", fmt.Errorf("missing hub secret: %s", wantSecret)))
 			failed = append(failed, "secret")

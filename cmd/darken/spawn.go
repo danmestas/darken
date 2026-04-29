@@ -47,31 +47,24 @@ func runSpawn(args []string) error {
 		}
 	}
 
-	cmd := []string{"start", name, "--type", *harnessType}
+	startArgs := []string{"--type", *harnessType}
 	if *backend != "" {
 		image := fmt.Sprintf("local/darkish-%s:latest", *backend)
-		cmd = append(cmd, "--harness", *backend, "--image", image)
+		startArgs = append(startArgs, "--harness", *backend, "--image", image)
 	}
 	if len(posArgs) > 0 {
-		cmd = append(cmd, posArgs...)
+		startArgs = append(startArgs, posArgs...)
 	}
 	if *watch {
-		cmd = append(cmd, "--attach")
-	}
-
-	c := scionCmdFn(cmd)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-
-	if *watch {
-		// Legacy mode: scion start --attach blocks until agent exits.
-		return c.Run()
+		startArgs = append(startArgs, "--attach")
+		// Legacy mode: StartAgent with --attach blocks until agent exits.
+		return defaultScionClient.StartAgent(name, startArgs)
 	}
 
 	// Hybrid: surface scion start's own immediate failures (template
 	// not found, bad args) directly. Post-dispatch failures (image
 	// pull, container init) get caught by the readiness poll below.
-	if err := c.Run(); err != nil {
+	if err := defaultScionClient.StartAgent(name, startArgs); err != nil {
 		return err
 	}
 

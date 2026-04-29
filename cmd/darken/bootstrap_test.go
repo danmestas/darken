@@ -2,26 +2,18 @@ package main
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// TestEnsureScionServer_UsesScionCmdFn asserts ensureScionServer routes
-// through scionCmdFn so hub-endpoint env propagation applies.
-func TestEnsureScionServer_UsesScionCmdFn(t *testing.T) {
-	called := false
-	orig := scionCmdFn
-	t.Cleanup(func() { scionCmdFn = orig })
-	scionCmdFn = func(args []string) *exec.Cmd {
-		called = true
-		// Simulate scion server status exits 0 (server running).
-		return exec.Command("true")
-	}
-	_ = ensureScionServer()
-	if !called {
-		t.Error("ensureScionServer did not call scionCmdFn")
+// TestEnsureScionServer_UsesScionClient asserts ensureScionServer routes
+// through ScionClient.ServerStatus so hub-endpoint env propagation applies.
+func TestEnsureScionServer_UsesScionClient(t *testing.T) {
+	mc := &mockScionClient{serverStatusOut: "Status: ok\n"}
+	setDefaultClient(t, mc)
+	if err := ensureScionServer(); err != nil {
+		t.Fatalf("ensureScionServer: %v", err)
 	}
 }
 
@@ -53,21 +45,13 @@ func TestBootstrapStepsAreOrdered(t *testing.T) {
 	}
 }
 
-// TestEnsureBrokerProvide_UsesScionCmdFn asserts ensureBrokerProvide routes
-// through scionCmdFn with the correct arguments.
-func TestEnsureBrokerProvide_UsesScionCmdFn(t *testing.T) {
-	var gotArgs []string
-	orig := scionCmdFn
-	t.Cleanup(func() { scionCmdFn = orig })
-	scionCmdFn = func(args []string) *exec.Cmd {
-		gotArgs = args
-		return exec.Command("true")
-	}
+// TestEnsureBrokerProvide_UsesScionClient asserts ensureBrokerProvide routes
+// through ScionClient.BrokerProvide.
+func TestEnsureBrokerProvide_UsesScionClient(t *testing.T) {
+	mc := &mockScionClient{}
+	setDefaultClient(t, mc)
 	if err := ensureBrokerProvide(); err != nil {
 		t.Fatalf("expected nil, got: %v", err)
-	}
-	if len(gotArgs) < 2 || gotArgs[0] != "broker" || gotArgs[1] != "provide" {
-		t.Fatalf("expected args [broker provide ...], got: %v", gotArgs)
 	}
 }
 

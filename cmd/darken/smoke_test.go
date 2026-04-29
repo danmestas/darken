@@ -110,7 +110,7 @@ esac
 	}
 
 	// Phase 3 - message: simulate commit of sentinel file.
-	msgCmd := scionCmdFn([]string{"message", agentName, "commit sentinel file to confirm substrate"})
+	msgCmd := scionCmd([]string{"message", agentName, "commit sentinel file to confirm substrate"})
 	msgCmd.Stdout = io.Discard
 	msgCmd.Stderr = io.Discard
 	if err := msgCmd.Run(); err != nil {
@@ -123,7 +123,7 @@ esac
 	}
 
 	// Phase 5 - stop agent.
-	stopCmd := scionCmdFn([]string{"stop", agentName})
+	stopCmd := scionCmd([]string{"stop", agentName})
 	stopCmd.Stdout = io.Discard
 	stopCmd.Stderr = io.Discard
 	if err := stopCmd.Run(); err != nil {
@@ -131,7 +131,7 @@ esac
 	}
 
 	// Phase 6 - delete agent.
-	delCmd := scionCmdFn([]string{"delete", agentName})
+	delCmd := scionCmd([]string{"delete", agentName})
 	delCmd.Stdout = io.Discard
 	delCmd.Stderr = io.Discard
 	if err := delCmd.Run(); err != nil {

@@ -8,7 +8,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 )
 
 func runSetup(args []string) error {
@@ -22,15 +21,12 @@ func runSetup(args []string) error {
 }
 
 // uploadAllTemplatesToHub pushes all 14 canonical templates to the Hub at
-// user (global) scope via `scion --global templates push <role>`.
+// user (global) scope via ScionClient.PushTemplate.
 // Runs after bootstrap so the scion server is guaranteed to be running.
 func uploadAllTemplatesToHub() error {
 	for _, role := range canonicalRoles {
 		fmt.Printf("uploading template %s to Hub (user scope) ...\n", role)
-		cmd := scionCmdFn([]string{"--global", "templates", "push", role})
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		if err := defaultScionClient.PushTemplate(role); err != nil {
 			return fmt.Errorf("upload template %s: %w", role, err)
 		}
 	}
