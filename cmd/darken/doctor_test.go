@@ -411,3 +411,84 @@ func TestCheckScionServerLiveness_InDoctorBroad(t *testing.T) {
 		t.Fatalf("doctorBroad report should mention liveness check, got:\n%s", report)
 	}
 }
+
+// B5: go-git FUSE sniff-test.
+
+// TestCheckGoGitFUSE_CleanMount confirms no error on a non-FUSE mount.
+func TestCheckGoGitFUSE_CleanMount(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "mounts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	cwd := t.TempDir()
+	// Standard ext4 mount covering cwd.
+	f.WriteString("overlay " + cwd + " ext4 rw 0 0\n")
+	f.WriteString("proc /proc proc rw 0 0\n")
+
+	if err := checkGoGitFUSEMounts(f.Name(), cwd); err != nil {
+		t.Fatalf("expected nil on non-FUSE mount, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_GrpcFuseDetected confirms error when cwd is on grpcfuse.
+func TestCheckGoGitFUSE_GrpcFuseDetected(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "mounts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	cwd := "/workspace"
+	f.WriteString("grpcfuse " + cwd + " fuse.grpcfuse rw,nosuid,nodev 0 0\n")
+
+	err = checkGoGitFUSEMounts(f.Name(), cwd)
+	if err == nil {
+		t.Fatal("expected error on grpcfuse mount")
+	}
+	if !strings.Contains(err.Error(), "fuse") {
+		t.Fatalf("error should mention fuse, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "go-git") {
+		t.Fatalf("error should mention go-git, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_VirtiofsDetected confirms error when cwd is on virtiofs.
+func TestCheckGoGitFUSE_VirtiofsDetected(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "mounts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	cwd := "/workspace"
+	f.WriteString("virtiofs " + cwd + " virtiofs rw 0 0\n")
+
+	err = checkGoGitFUSEMounts(f.Name(), cwd)
+	if err == nil {
+		t.Fatal("expected error on virtiofs mount")
+	}
+	if !strings.Contains(err.Error(), "go-git") {
+		t.Fatalf("error should mention go-git, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_NoMountsFile confirms no error when /proc/mounts absent.
+func TestCheckGoGitFUSE_NoMountsFile(t *testing.T) {
+	if err := checkGoGitFUSEMounts("/nonexistent/path/mounts", "/workspace"); err != nil {
+		t.Fatalf("expected nil when mounts file absent, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_RemediationInDoctorBroad confirms doctorBroad includes
+// the FUSE check in its output label.
+func TestCheckGoGitFUSE_RemediationInDoctorBroad(t *testing.T) {
+	stubDir := t.TempDir()
+	os.WriteFile(filepath.Join(stubDir, "scion"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	os.WriteFile(filepath.Join(stubDir, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	report, _ := doctorBroad()
+	if !strings.Contains(report, "go-git") || !strings.Contains(report, "FUSE") {
+		t.Fatalf("doctorBroad should mention go-git FUSE check, got:\n%s", report)
+	}
+}
