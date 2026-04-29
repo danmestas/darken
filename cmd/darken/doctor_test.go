@@ -2,6 +2,8 @@ package main
 
 import (
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -327,5 +329,85 @@ func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
 	}
 	if !strings.Contains(report, "darken setup") {
 		t.Fatalf("failure report should mention `darken setup`:\n%s", report)
+	}
+}
+
+// B3: scion server liveness check tests.
+
+// TestCheckScionServerLiveness_HealthzOK confirms a 200 /healthz response passes.
+func TestCheckScionServerLiveness_HealthzOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	t.Setenv("DARKEN_HUB_ENDPOINT", srv.URL)
+
+	if err := checkScionServerLiveness(); err != nil {
+		t.Fatalf("expected nil when /healthz returns 200, got: %v", err)
+	}
+}
+
+// TestCheckScionServerLiveness_HealthzFailsFallsThroughToDaemonLine confirms
+// that when healthz is unreachable and scion status shows a running daemon,
+// the check passes.
+func TestCheckScionServerLiveness_HealthzFailsFallsThroughToDaemonLine(t *testing.T) {
+	// Close the server immediately so the healthz probe fails fast.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+	t.Setenv("DARKEN_HUB_ENDPOINT", addr)
+
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		return exec.Command("printf", "Status: ok\\nDaemon: running (pid 42)\\nGroves: 1\\n")
+	}
+
+	if err := checkScionServerLiveness(); err != nil {
+		t.Fatalf("expected nil when daemon line reports running, got: %v", err)
+	}
+}
+
+// TestCheckScionServerLiveness_DaemonStopped confirms the check fails when
+// the daemon line reports a non-running state.
+func TestCheckScionServerLiveness_DaemonStopped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+	t.Setenv("DARKEN_HUB_ENDPOINT", addr)
+
+	orig := scionCmdFn
+	t.Cleanup(func() { scionCmdFn = orig })
+	scionCmdFn = func(args []string) *exec.Cmd {
+		return exec.Command("printf", "Status: stopped\\nDaemon: stopped\\n")
+	}
+
+	if err := checkScionServerLiveness(); err == nil {
+		t.Fatal("expected error when daemon line reports stopped")
+	}
+}
+
+// TestCheckScionServerLiveness_InDoctorBroad confirms doctorBroad includes
+// the liveness check in its output.
+func TestCheckScionServerLiveness_InDoctorBroad(t *testing.T) {
+	stubDir := t.TempDir()
+	// Stub scion to fail so doctorBroad terminates early and we can inspect output.
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"),
+		[]byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stubDir, "docker"),
+		[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	report, _ := doctorBroad()
+	if !strings.Contains(report, "liveness") {
+		t.Fatalf("doctorBroad report should mention liveness check, got:\n%s", report)
 	}
 }
