@@ -17,3 +17,5 @@ volumes:
     read_only: true
 # Codex auth comes from the user-scope hub secret 'codex_auth' (set via:
 # scion hub secret set --type file --target /home/scion/.codex/auth.json codex_auth @~/.codex/auth.json)
+hub:
+  endpoint: http://host.docker.internal:8080
