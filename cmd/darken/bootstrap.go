@@ -20,6 +20,7 @@ func runBootstrap(args []string) error {
 		{"docker daemon reachable", checkDocker},
 		{"scion CLI present", checkScion},
 		{"scion server running", ensureScionServer},
+		{"grove registered with broker", ensureBrokerProvide},
 		{"darken images built", ensureImages},
 		{"hub secrets pushed", ensureHubSecrets},
 		{"per-harness skills staged", ensureAllSkillsStaged},
@@ -37,10 +38,23 @@ func runBootstrap(args []string) error {
 
 // ensureScionServer starts the scion server if not already running.
 func ensureScionServer() error {
-	if err := exec.Command("scion", "server", "status").Run(); err == nil {
+	if _, err := defaultScionClient.ServerStatus(); err == nil {
 		return nil
 	}
-	return exec.Command("scion", "server", "start").Run()
+	// Server not running: start it. Server start is a bootstrap-only
+	// imperative not exposed on ScionClient (callers need check-only or
+	// ensure-running; expose the latter here via a direct exec).
+	cmd := scionCmdWithEnv([]string{"server", "start"})
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// ensureBrokerProvide registers the current grove with the local broker so
+// agents can be dispatched here. Idempotent — scion broker provide is a
+// no-op when the grove is already registered.
+func ensureBrokerProvide() error {
+	return defaultScionClient.BrokerProvide()
 }
 
 // ensureImages builds any missing darken images via `make -C images <backend>`.
@@ -152,7 +166,12 @@ func extractEmbeddedTemplates() (string, func(), error) {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(dst, body, 0o644)
+		// Substitute ${DARKEN_*} placeholders in scion-agent.yaml manifests.
+		content := string(body)
+		if strings.HasSuffix(path, "scion-agent.yaml") {
+			content = expandManifest(content)
+		}
+		return os.WriteFile(dst, []byte(content), 0o644)
 	})
 	if walkErr != nil {
 		cleanup()

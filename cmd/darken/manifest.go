@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/danmestas/darken/internal/substrate"
 )
@@ -72,6 +73,28 @@ func writeInitManifest(target string, arts []artifact) error {
 		return err
 	}
 	return os.Rename(tmp, dst)
+}
+
+// expandManifest returns body with ${DARKEN_*} placeholders replaced.
+// Only variables whose names start with DARKEN_ are substituted; all
+// other shell expansions (e.g. $HOME, $PATH) are left untouched.
+// The default value for DARKEN_HUB_ENDPOINT is http://host.docker.internal:8080.
+func expandManifest(body string) string {
+	return os.Expand(body, func(key string) string {
+		if !strings.HasPrefix(key, "DARKEN_") {
+			// Return the original placeholder so it survives unexpanded.
+			return "${" + key + "}"
+		}
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+		// Built-in defaults for known DARKEN_ keys.
+		switch key {
+		case "DARKEN_HUB_ENDPOINT":
+			return defaultHubEndpoint
+		}
+		return ""
+	})
 }
 
 // readInitManifest reads <target>/.scion/init-manifest.json. Returns

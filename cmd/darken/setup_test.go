@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,5 +168,66 @@ func TestSetup_AbortsOnInitFailure(t *testing.T) {
 	body, _ := os.ReadFile(logPath)
 	if strings.Contains(string(body), "scion server status") {
 		t.Fatalf("bootstrap should not have been called after init failure:\n%s", body)
+	}
+}
+
+// TestSetup_UploadsAllTemplatesToHub confirms runSetup calls PushTemplate for
+// all 14 canonical roles via the ScionClient interface.
+func TestSetup_UploadsAllTemplatesToHub(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	logPath := stubAllBinariesForSetup(t)
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(prev) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runSetup(nil); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	// The PATH scion stub logs every scion invocation. Verify that
+	// --global templates push <role> appears for every canonical role.
+	body, _ := os.ReadFile(logPath)
+	log := string(body)
+	for _, role := range canonicalRoles {
+		want := "--global templates push " + role
+		if !strings.Contains(log, want) {
+			t.Errorf("expected scion %q to be called; log:\n%s", want, log)
+		}
+	}
+}
+
+// TestSetup_TemplateUploadFailureAbortsSetup confirms that a PushTemplate error
+// propagates and aborts setup.
+func TestSetup_TemplateUploadFailureAbortsSetup(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	stubAllBinariesForSetup(t)
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(prev) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+
+	// Inject a mock that passes all operations except PushTemplate.
+	mc := &mockScionClient{
+		serverStatusOut: "Status: ok\n",
+		secretListOut:   "claude_auth\ncodex_auth\n",
+		pushTemplateErr: fmt.Errorf("push failed: connection refused"),
+	}
+	setDefaultClient(t, mc)
+
+	if err := runSetup(nil); err == nil {
+		t.Fatal("expected setup to fail when template upload fails")
 	}
 }

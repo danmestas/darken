@@ -1,0 +1,12 @@
+# Substrate skill roster.
+# vendor-skills target copies entries from DARKEN_SKILLS_SOURCE into
+# internal/substrate/data/skills/. Shells authored directly in this
+# repo (superpowers, spec-kit) are committed and skipped by vendor-skills
+# when absent from DARKEN_SKILLS_SOURCE.
+orchestrator-mode
+subagent-to-subharness
+hipp
+ousterhout
+superpowers
+spec-kit
+writing-plans

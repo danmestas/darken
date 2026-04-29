@@ -9,4 +9,4 @@ model: claude-sonnet-4-6
 max_turns: 50
 max_duration: 3600
 hub:
-  endpoint: http://host.docker.internal:8080
+  endpoint: ${DARKEN_HUB_ENDPOINT}

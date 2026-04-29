@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -258,6 +261,40 @@ func TestInitDoctor_FailsOnMissingStatusLine(t *testing.T) {
 	}
 }
 
+// Note: TestCheckScion_UsesScionClient, TestCheckScionServer_UsesScionClient,
+// and TestCheckHubSecrets_UsesScionClient live in scion_client_test.go where
+// the mockScionClient infrastructure is defined.
+
+// TestCheckScion_CLIPresentDaemonDown verifies that when scion CLI is on PATH
+// but the daemon is unreachable, checkScion passes (CLI present) while the
+// broader doctor report emits the daemon-down message, not a CLI-missing message.
+func TestCheckScion_CLIPresentDaemonDown(t *testing.T) {
+	// Put a scion stub that exits 0 (CLI present) on PATH.
+	stubDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"),
+		[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	// checkScion must pass: CLI is present.
+	if err := checkScion(); err != nil {
+		t.Fatalf("checkScion should pass when scion binary is on PATH, got: %v", err)
+	}
+
+	// checkScionServer uses a mock that simulates daemon down.
+	setDefaultClient(t, &mockScionClient{
+		serverStatusErr: errors.New("connection refused"),
+	})
+	err := checkScionServer()
+	if err == nil {
+		t.Fatal("expected checkScionServer to fail when ServerStatus errors")
+	}
+	if strings.Contains(err.Error(), "not on PATH") {
+		t.Fatalf("daemon-down error must not say 'not on PATH', got: %v", err)
+	}
+}
+
 func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
 	// Stub scion to exit non-zero so checkScion fails.
 	stubDir := t.TempDir()
@@ -279,5 +316,243 @@ func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
 	}
 	if !strings.Contains(report, "darken setup") {
 		t.Fatalf("failure report should mention `darken setup`:\n%s", report)
+	}
+}
+
+// B3: scion server liveness check tests.
+
+// TestCheckScionServerLiveness_HealthzOK confirms a 200 /healthz response passes.
+func TestCheckScionServerLiveness_HealthzOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	t.Setenv("DARKEN_HUB_ENDPOINT", srv.URL)
+
+	if err := checkScionServerLiveness(); err != nil {
+		t.Fatalf("expected nil when /healthz returns 200, got: %v", err)
+	}
+}
+
+// TestCheckScionServerLiveness_HealthzFailsFallsThroughToDaemonLine confirms
+// that when healthz is unreachable and scion status shows a running daemon,
+// the check passes.
+func TestCheckScionServerLiveness_HealthzFailsFallsThroughToDaemonLine(t *testing.T) {
+	// Close the server immediately so the healthz probe fails fast.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+	t.Setenv("DARKEN_HUB_ENDPOINT", addr)
+
+	setDefaultClient(t, &mockScionClient{
+		serverStatusOut: "Status: ok\nDaemon: running (pid 42)\nGroves: 1\n",
+	})
+
+	if err := checkScionServerLiveness(); err != nil {
+		t.Fatalf("expected nil when daemon line reports running, got: %v", err)
+	}
+}
+
+// TestCheckScionServerLiveness_DaemonStopped confirms the check fails when
+// the daemon line reports a non-running state.
+func TestCheckScionServerLiveness_DaemonStopped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+	t.Setenv("DARKEN_HUB_ENDPOINT", addr)
+
+	setDefaultClient(t, &mockScionClient{
+		serverStatusOut: "Status: stopped\nDaemon: stopped\n",
+	})
+
+	if err := checkScionServerLiveness(); err == nil {
+		t.Fatal("expected error when daemon line reports stopped")
+	}
+}
+
+// TestCheckScionServerLiveness_InDoctorBroad confirms doctorBroad includes
+// the liveness check in its output.
+func TestCheckScionServerLiveness_InDoctorBroad(t *testing.T) {
+	stubDir := t.TempDir()
+	// Stub scion to fail so doctorBroad terminates early and we can inspect output.
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"),
+		[]byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stubDir, "docker"),
+		[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	report, _ := doctorBroad()
+	if !strings.Contains(report, "liveness") {
+		t.Fatalf("doctorBroad report should mention liveness check, got:\n%s", report)
+	}
+}
+
+// B7: /etc/hosts host.docker.internal check.
+
+// TestCheckHostsDockerInternal_Present confirms no error when entry exists.
+func TestCheckHostsDockerInternal_Present(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.WriteString("127.0.0.1\tlocalhost\n")
+	f.WriteString("127.0.0.1\thost.docker.internal\n")
+
+	if err := checkHostsDockerInternalFile(f.Name()); err != nil {
+		t.Fatalf("expected nil when entry present, got: %v", err)
+	}
+}
+
+// TestCheckHostsDockerInternal_Missing confirms error with remediation when entry absent.
+func TestCheckHostsDockerInternal_Missing(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.WriteString("127.0.0.1\tlocalhost\n")
+	f.WriteString("::1\t\tlocalhost\n")
+
+	err = checkHostsDockerInternalFile(f.Name())
+	if err == nil {
+		t.Fatal("expected error when host.docker.internal missing from /etc/hosts")
+	}
+	if !strings.Contains(err.Error(), "host.docker.internal") {
+		t.Fatalf("error should name the missing host, got: %v", err)
+	}
+}
+
+// TestCheckHostsDockerInternal_CommentedLine confirms a commented-out entry
+// is not counted as present.
+func TestCheckHostsDockerInternal_CommentedLine(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.WriteString("# 127.0.0.1 host.docker.internal\n")
+
+	err = checkHostsDockerInternalFile(f.Name())
+	if err == nil {
+		t.Fatal("expected error: commented-out entry should not satisfy the check")
+	}
+}
+
+// TestCheckHostsDockerInternal_RemediationInReport confirms doctorBroad
+// includes the remediation text when the entry is missing.
+func TestCheckHostsDockerInternal_RemediationInReport(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "hosts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// empty hosts file
+	f.Close()
+
+	// Override the hosts path via the injectable function.
+	orig := hostsFilePath
+	t.Cleanup(func() { hostsFilePath = orig })
+	hostsFilePath = f.Name()
+
+	stubDir := t.TempDir()
+	os.WriteFile(filepath.Join(stubDir, "scion"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	os.WriteFile(filepath.Join(stubDir, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	report, _ := doctorBroad()
+	if !strings.Contains(report, "host.docker.internal") {
+		t.Fatalf("report should mention host.docker.internal, got:\n%s", report)
+	}
+	if !strings.Contains(report, "sudo tee") {
+		t.Fatalf("report should include sudo tee remediation, got:\n%s", report)
+	}
+}
+
+// B5: go-git FUSE sniff-test.
+
+// TestCheckGoGitFUSE_CleanMount confirms no error on a non-FUSE mount.
+func TestCheckGoGitFUSE_CleanMount(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "mounts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	cwd := t.TempDir()
+	// Standard ext4 mount covering cwd.
+	f.WriteString("overlay " + cwd + " ext4 rw 0 0\n")
+	f.WriteString("proc /proc proc rw 0 0\n")
+
+	if err := checkGoGitFUSEMounts(f.Name(), cwd); err != nil {
+		t.Fatalf("expected nil on non-FUSE mount, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_GrpcFuseDetected confirms error when cwd is on grpcfuse.
+func TestCheckGoGitFUSE_GrpcFuseDetected(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "mounts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	cwd := "/workspace"
+	f.WriteString("grpcfuse " + cwd + " fuse.grpcfuse rw,nosuid,nodev 0 0\n")
+
+	err = checkGoGitFUSEMounts(f.Name(), cwd)
+	if err == nil {
+		t.Fatal("expected error on grpcfuse mount")
+	}
+	if !strings.Contains(err.Error(), "fuse") {
+		t.Fatalf("error should mention fuse, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "go-git") {
+		t.Fatalf("error should mention go-git, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_VirtiofsDetected confirms error when cwd is on virtiofs.
+func TestCheckGoGitFUSE_VirtiofsDetected(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "mounts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	cwd := "/workspace"
+	f.WriteString("virtiofs " + cwd + " virtiofs rw 0 0\n")
+
+	err = checkGoGitFUSEMounts(f.Name(), cwd)
+	if err == nil {
+		t.Fatal("expected error on virtiofs mount")
+	}
+	if !strings.Contains(err.Error(), "go-git") {
+		t.Fatalf("error should mention go-git, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_NoMountsFile confirms no error when /proc/mounts absent.
+func TestCheckGoGitFUSE_NoMountsFile(t *testing.T) {
+	if err := checkGoGitFUSEMounts("/nonexistent/path/mounts", "/workspace"); err != nil {
+		t.Fatalf("expected nil when mounts file absent, got: %v", err)
+	}
+}
+
+// TestCheckGoGitFUSE_RemediationInDoctorBroad confirms doctorBroad includes
+// the FUSE check in its output label.
+func TestCheckGoGitFUSE_RemediationInDoctorBroad(t *testing.T) {
+	stubDir := t.TempDir()
+	os.WriteFile(filepath.Join(stubDir, "scion"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	os.WriteFile(filepath.Join(stubDir, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	report, _ := doctorBroad()
+	if !strings.Contains(report, "go-git") || !strings.Contains(report, "FUSE") {
+		t.Fatalf("doctorBroad should mention go-git FUSE check, got:\n%s", report)
 	}
 }

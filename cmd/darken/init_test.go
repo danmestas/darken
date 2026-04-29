@@ -307,6 +307,32 @@ func TestInit_FailsFastWhenDockerMissing(t *testing.T) {
 	}
 }
 
+// TestInit_BonesAlreadyInitializedIsNoOp verifies that when bones init
+// exits non-zero with an "already initialized" message, runInit treats
+// the workspace as already bootstrapped: returns nil AND emits no
+// "bones init failed" warning to stderr.
+func TestInit_BonesAlreadyInitializedIsNoOp(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	stubDir := t.TempDir()
+	// scion + docker exit 0; bones exits 1 with the already-initialized message.
+	for _, b := range []string{"scion", "docker"} {
+		os.WriteFile(filepath.Join(stubDir, b), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	}
+	os.WriteFile(filepath.Join(stubDir, "bones"),
+		[]byte("#!/bin/sh\necho 'workspace already initialized' >&2\nexit 1\n"), 0o755)
+	t.Setenv("PATH", stubDir)
+
+	stderr, err := captureStderr(func() error { return runInit([]string{tmp}) })
+	if err != nil {
+		t.Fatalf("runInit should no-op when bones reports already-initialized, got: %v", err)
+	}
+	if strings.Contains(stderr, "bones init failed") {
+		t.Fatalf("already-initialized should not log 'bones init failed', got stderr: %q", stderr)
+	}
+}
+
 func TestInit_PassesWhenAllPrereqsPresent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)

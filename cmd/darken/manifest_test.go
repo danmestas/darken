@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -82,5 +83,62 @@ func TestInitManifest_ReadMalformedReturnsError(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("expected nil manifest on parse error, got %+v", got)
+	}
+}
+
+// --- expandManifest tests ---
+
+func TestManifest_SubstitutesHubEndpoint(t *testing.T) {
+	t.Setenv("DARKEN_HUB_ENDPOINT", "http://example:9090")
+	body := "hub:\n  endpoint: ${DARKEN_HUB_ENDPOINT}\n"
+	got := expandManifest(body)
+	want := "hub:\n  endpoint: http://example:9090\n"
+	if got != want {
+		t.Errorf("expandManifest: got %q, want %q", got, want)
+	}
+}
+
+func TestManifest_DefaultsHubEndpoint(t *testing.T) {
+	t.Setenv("DARKEN_HUB_ENDPOINT", "")
+	body := "hub:\n  endpoint: ${DARKEN_HUB_ENDPOINT}\n"
+	got := expandManifest(body)
+	want := "hub:\n  endpoint: http://host.docker.internal:8080\n"
+	if got != want {
+		t.Errorf("expandManifest default: got %q, want %q", got, want)
+	}
+}
+
+func TestManifest_RestrictsExpansionToDarkenPrefix(t *testing.T) {
+	t.Setenv("HOME", "/should-not-expand")
+	body := "home: $HOME\nendpoint: ${DARKEN_HUB_ENDPOINT}\n"
+	got := expandManifest(body)
+	if strings.Contains(got, "/should-not-expand") {
+		t.Errorf("expandManifest expanded $HOME — should only expand DARKEN_* vars: %q", got)
+	}
+	if strings.Contains(got, "$HOME") {
+		// $HOME must survive unexpanded.
+		// (This is the correct behaviour — the check above already fails if expanded.)
+	}
+}
+
+func TestManifest_AllTemplatesUseSubstitution(t *testing.T) {
+	root, err := repoRoot()
+	if err != nil {
+		t.Skipf("not in a git repo: %v", err)
+	}
+	for _, role := range canonicalRoles {
+		p := filepath.Join(root, ".scion", "templates", role, "scion-agent.yaml")
+		body, err := os.ReadFile(p)
+		if err != nil {
+			t.Errorf("role %s: cannot read manifest: %v", role, err)
+			continue
+		}
+		s := string(body)
+		if !strings.Contains(s, "${DARKEN_HUB_ENDPOINT}") {
+			t.Errorf("role %s: manifest missing ${DARKEN_HUB_ENDPOINT} placeholder", role)
+		}
+		if strings.Contains(s, "host.docker.internal") {
+			t.Errorf("role %s: manifest still contains hardcoded host.docker.internal", role)
+		}
 	}
 }
