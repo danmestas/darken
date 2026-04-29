@@ -16,3 +16,5 @@ volumes:
   - source: ./.scion/skills-staging/reviewer/
     target: /home/scion/skills/role/
     read_only: true
+hub:
+  endpoint: http://host.docker.internal:8080

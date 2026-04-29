@@ -44,7 +44,7 @@ func runSpawn(args []string) error {
 		cmd = append(cmd, "--harness", *backend, "--image", image)
 	}
 	if len(posArgs) > 0 {
-		cmd = append(cmd, "--notify", posArgs[0])
+		cmd = append(cmd, posArgs...)
 	}
 	if *watch {
 		cmd = append(cmd, "--attach")
