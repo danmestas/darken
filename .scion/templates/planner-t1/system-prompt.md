@@ -12,5 +12,5 @@ No spec. Skip directly to the change once you understand it.
 
 ## Skill: hipp
 
-Available at `/home/scion/skills/role/hipp/`. When tempted to scope
+Available at ’/home/scion/skills/role/hipp/’. When tempted to scope
 beyond the bug, hipp is your discipline anchor: minimum-viable-change.

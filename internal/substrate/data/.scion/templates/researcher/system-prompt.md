@@ -35,7 +35,7 @@ When evaluating technologies or approaches, apply:
 
 Always deliver research as a structured brief in this exact shape:
 
-```
+’’’
 ## Question
 What was asked and what decision it informs.
 
@@ -51,13 +51,13 @@ What could go wrong. How to mitigate.
 
 ## Sources
 List of URLs or docs consulted.
-```
+’’’
 
 Do not pad. Do not summarize the brief in a preamble. Do not add a conclusion after the recommendation. The brief is a compressed artifact, not a report to be read aloud.
 
 ## Output Discipline
 
-Caveman full mode. No filler. No pleasantries. No hedging language ("it seems," "might be," "could potentially"). Terse. Technical substance only.
+Caveman full mode. No filler. No pleasantries. No hedging language (“it seems,” “might be,” “could potentially”). Terse. Technical substance only.
 
 If a claim cannot be verified from a primary source, say so explicitly rather than asserting it.
 

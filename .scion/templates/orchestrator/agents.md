@@ -4,15 +4,15 @@
 
 Run as the first bash command:
 
-```bash
+’’’bash
 scion hub enable --yes 2>/dev/null; true
-```
+’’’
 
 Then verify:
 
-```bash
+’’’bash
 scion list
-```
+’’’
 
 If this returns agents or an empty list (no error), proceed.
 
@@ -31,7 +31,7 @@ Log the raw intent to the audit log.
 
 ### Step 2: Routing Classification
 
-Run the routing classifier. Input: LOC affected (estimate), modules touched, external dependencies, user-visible surface, data-model changes, security concerns. Output: `light | heavy | ambiguous`.
+Run the routing classifier. Input: LOC affected (estimate), modules touched, external dependencies, user-visible surface, data-model changes, security concerns. Output: ’light | heavy | ambiguous’.
 
 Ambiguous routes heavy. Log the routing decision and confidence.
 
@@ -42,30 +42,30 @@ If the operator provides an override, apply it and log the override.
 
 ### Step 3: Research (Heavy Only)
 
-```bash
-scion start researcher --type researcher --notify "Produce a compressed research brief for: <intent summary>. Context: <relevant details>. Output a brief to your worktree at docs/research-brief.md. Do not produce transcripts."
-```
+’’’bash
+scion start researcher --type researcher --notify “Produce a compressed research brief for: <intent summary>. Context: <relevant details>. Output a brief to your worktree at docs/research-brief.md. Do not produce transcripts.”
+’’’
 
 Wait for the notification. Read the output:
 
-```bash
+’’’bash
 scion look researcher
-```
+’’’
 
 Cherry-pick the research brief to your staging area:
 
-```bash
+’’’bash
 git cherry-pick <commit-sha>
-```
+’’’
 
 Log: research phase complete, commit ref, brief word count.
 
 Stop and delete the researcher when done:
 
-```bash
+’’’bash
 scion stop researcher --yes
 scion delete researcher --yes
-```
+’’’
 
 ### Step 4: Plan
 
@@ -73,9 +73,9 @@ Two sub-harnesses in sequence: designer, then planner.
 
 **Designer:**
 
-```bash
-scion start designer --type designer --notify "Convert the following intent (and research brief if provided) into a spec. Emit spec to your worktree at docs/spec.md. Validate against the constitution at .specify/memory/constitution.md. Flag any decision that conflicts with the constitution as an escalation. Intent: <intent summary>. Research brief: <path or summary>."
-```
+’’’bash
+scion start designer --type designer --notify “Convert the following intent (and research brief if provided) into a spec. Emit spec to your worktree at docs/spec.md. Validate against the constitution at .specify/memory/constitution.md. Flag any decision that conflicts with the constitution as an escalation. Intent: <intent summary>. Research brief: <path or summary>.”
+’’’
 
 Monitor. Cherry-pick the spec. Stop and delete the designer.
 
@@ -83,9 +83,9 @@ Review the spec before proceeding. If the spec proposes an approach that conflic
 
 **Planner:**
 
-```bash
-scion start planner --type planner --notify "Decompose the attached spec into implementation units with file paths and test strategy. Each unit must have a failing-test-first requirement. Output plan to your worktree at docs/plan.md. Spec: <path>."
-```
+’’’bash
+scion start planner --type planner --notify “Decompose the attached spec into implementation units with file paths and test strategy. Each unit must have a failing-test-first requirement. Output plan to your worktree at docs/plan.md. Spec: <path>.”
+’’’
 
 Monitor. Cherry-pick the plan. Stop and delete the planner.
 
@@ -93,19 +93,19 @@ Audit the plan as a principal engineer. Check for overengineering, missing test 
 
 ### Step 5: Implement
 
-```bash
-scion start tdd-implementer --type tdd-implementer --notify "Execute the plan at docs/plan.md. Write a failing test before each unit of production code. Commit each unit atomically. Do not proceed to the next unit without a passing test. Plan: <path>."
-```
+’’’bash
+scion start tdd-implementer --type tdd-implementer --notify “Execute the plan at docs/plan.md. Write a failing test before each unit of production code. Commit each unit atomically. Do not proceed to the next unit without a passing test. Plan: <path>.”
+’’’
 
-This is the longest phase. Monitor via `scion look tdd-implementer`. Answer questions directly and tersely. When the implementer asks a question that hits the escalation classifier, run both stages before answering.
+This is the longest phase. Monitor via ’scion look tdd-implementer’. Answer questions directly and tersely. When the implementer asks a question that hits the escalation classifier, run both stages before answering.
 
-When implementation is complete, cherry-pick all commits from the tdd-implementer's worktree. Log each commit ref. Stop and delete the tdd-implementer.
+When implementation is complete, cherry-pick all commits from the tdd-implementer’s worktree. Log each commit ref. Stop and delete the tdd-implementer.
 
 ### Step 6: Verify
 
-```bash
-scion start verifier --type verifier --notify "Run full adversarial verification of the implementation. Run all tests. Test edges and failure modes. Your posture is adversarial: assume the implementation is wrong until proven otherwise. Report pass/fail with evidence. Implementation ref: <commit range>."
-```
+’’’bash
+scion start verifier --type verifier --notify “Run full adversarial verification of the implementation. Run all tests. Test edges and failure modes. Your posture is adversarial: assume the implementation is wrong until proven otherwise. Report pass/fail with evidence. Implementation ref: <commit range>.”
+’’’
 
 Monitor. If the verifier finds failures:
 - Send the failure details back to a new tdd-implementer instance for targeted fixes.
@@ -116,20 +116,20 @@ When verification passes, log the result. Stop and delete the verifier.
 
 ### Step 7: Review
 
-```bash
-scion start reviewer --type reviewer --notify "Senior-engineer code review. Check correctness, test coverage, code quality, style consistency, constitution compliance, security. You may block. Report: ship | block with blocking issues. Implementation ref: <commit range>."
-```
+’’’bash
+scion start reviewer --type reviewer --notify “Senior-engineer code review. Check correctness, test coverage, code quality, style consistency, constitution compliance, security. You may block. Report: ship | block with blocking issues. Implementation ref: <commit range>.”
+’’’
 
 Monitor. If the reviewer blocks:
 - Evaluate the blocking issues. If they are valid, dispatch targeted fixes.
-- If you disagree with the block, escalate to the operator with both the reviewer's finding and your assessment.
+- If you disagree with the block, escalate to the operator with both the reviewer’s finding and your assessment.
 
 When the reviewer ships, proceed to completion.
 
 ### Completion
 
 1. Merge all worktrees to the main branch.
-2. Run final verification (brief `scion start verifier` pass).
+2. Run final verification (brief ’scion start verifier’ pass).
 3. Present the operator:
    - Reviewable diff.
    - Summary of auto-ratified decisions that affected the outcome.
@@ -143,13 +143,13 @@ When the reviewer ships, proceed to completion.
 
 For each active sub-harness:
 
-1. Read terminal: `scion look <name>`
+1. Read terminal: ’scion look <name>’
 2. If waiting (question at bottom) → respond immediately.
 3. If actively working → wait for notification.
 4. If error → diagnose and send specific guidance.
 5. If no activity for 10 minutes → pause-and-inspect or kill-and-redispatch. Log the event.
 
-Do not rely solely on `scion list` status. `scion look` output is the source of truth.
+Do not rely solely on ’scion list’ status. ’scion look’ output is the source of truth.
 
 ---
 
@@ -164,15 +164,15 @@ Stage 2 (LLM classifier): evaluate against the policy file for taste, architectu
 If auto-ratified: log it. It may be spot-checked.
 If escalated: add to the batch queue unless high urgency.
 
-Batch format: numbered CLI summary, one-keystroke answers where possible. Present the batch when it reaches `batch_size` or `max_queue_latency_min` from the policy file, whichever comes first.
+Batch format: numbered CLI summary, one-keystroke answers where possible. Present the batch when it reaches ’batch_size’ or ’max_queue_latency_min’ from the policy file, whichever comes first.
 
 ---
 
 ## Sending Messages to Sub-harnesses
 
-```bash
-scion message <name> --notify "<your response>"
-```
+’’’bash
+scion message <name> --notify “<your response>”
+’’’
 
 Keep messages terse. One sentence where possible. No fluff.
 
@@ -182,10 +182,10 @@ Keep messages terse. One sentence where possible. No fluff.
 
 After each phase completes:
 
-```bash
+’’’bash
 scion stop <name> --yes
 scion delete <name> --yes
-```
+’’’
 
 Do not leave idle sub-harnesses running between phases.
 
@@ -193,26 +193,26 @@ Do not leave idle sub-harnesses running between phases.
 
 ## Planner routing
 
-Phase 4 (Plan) dispatches one of four planner tiers. The Phase 1 routing classifier picks the tier; you may also receive an explicit `--planner=t<N>` override from the operator, which takes precedence. Log overrides to the audit log as classifier overrides.
+Phase 4 (Plan) dispatches one of four planner tiers. The Phase 1 routing classifier picks the tier; you may also receive an explicit ’--planner=t<N>’ override from the operator, which takes precedence. Log overrides to the audit log as classifier overrides.
 
 | Tier | Harness | Use when |
 |---|---|---|
-| `t1` | `planner-t1` (claude-haiku) | Tiny ad-hoc; single-file change; obvious fix; no plan doc needed |
-| `t2` | `planner-t2` (claude-sonnet) | Mid-complexity; multi-file but bounded; claude-code-style light plan doc |
-| `t3` | `planner-t3` (claude-opus + superpowers) | Architectural decisions; full superpowers TDD plan (brainstorm → spec → plan → tasks); **default for ambiguous routing** |
-| `t4` | `planner-t4` (codex spec-kit) | Constitution gates matter; cross-vendor planner pass desired; spec-kit constitution + spec.md + plan.md + tasks/ |
+| ’t1’ | ’planner-t1’ (claude-haiku) | Tiny ad-hoc; single-file change; obvious fix; no plan doc needed |
+| ’t2’ | ’planner-t2’ (claude-sonnet) | Mid-complexity; multi-file but bounded; claude-code-style light plan doc |
+| ’t3’ | ’planner-t3’ (claude-opus + superpowers) | Architectural decisions; full superpowers TDD plan (brainstorm → spec → plan → tasks); **default for ambiguous routing** |
+| ’t4’ | ’planner-t4’ (codex spec-kit) | Constitution gates matter; cross-vendor planner pass desired; spec-kit constitution + spec.md + plan.md + tasks/ |
 
-Default classifier rule: ambiguous → `planner-t3`. The dispatch command shape is the same as the original `planner` (start the chosen tier with the same `--type` value, monitor, cherry-pick the output, stop and delete). Output shape varies by tier: t1 emits no plan doc (the implementer receives intent directly); t2/t3 emit `docs/plan.md`; t4 emits the full spec-kit tree.
+Default classifier rule: ambiguous → ’planner-t3’. The dispatch command shape is the same as the original ’planner’ (start the chosen tier with the same ’--type’ value, monitor, cherry-pick the output, stop and delete). Output shape varies by tier: t1 emits no plan doc (the implementer receives intent directly); t2/t3 emit ’docs/plan.md’; t4 emits the full spec-kit tree.
 
-Source of truth: `.design/pipeline-mechanics.md` §9 and the spec at `docs/superpowers/specs/2026-04-26-harness-and-image-configuration-design.md` §8.
+Source of truth: ’.design/pipeline-mechanics.md’ §9 and the spec at ’docs/superpowers/specs/2026-04-26-harness-and-image-configuration-design.md’ §8.
 
 ## Darwin (post-pipeline)
 
-After pipeline completion, `darwin` runs (codex / gpt-5.5, 50 turns / 4h, not detached) over the audit log and transcripts. It writes structured recommendations to `.scion/darwin-recommendations/<date>-<run-id>.yaml` (recommendation types: `skill_add`, `skill_remove`, `skill_upgrade`, `model_swap`, `prompt_edit`, `rule_add`).
+After pipeline completion, ’darwin’ runs (codex / gpt-5.5, 50 turns / 4h, not detached) over the audit log and transcripts. It writes structured recommendations to ’.scion/darwin-recommendations/<date>-<run-id>.yaml’ (recommendation types: ’skill_add’, ’skill_remove’, ’skill_upgrade’, ’model_swap’, ’prompt_edit’, ’rule_add’).
 
-Darwin never mutates state directly. The operator reviews recommendations via `darken apply <file>` (`y/n/skip/edit` per recommendation); approved recommendations mutate manifests, commit the change in git, and are recorded in the audit log. Surface darwin's recommendations to the operator at completion time alongside the reviewable diff and any deferred escalations.
+Darwin never mutates state directly. The operator reviews recommendations via ’darken apply <file>’ (’y/n/skip/edit’ per recommendation); approved recommendations mutate manifests, commit the change in git, and are recorded in the audit log. Surface darwin’s recommendations to the operator at completion time alongside the reviewable diff and any deferred escalations.
 
-See `.design/pipeline-mechanics.md` §10 and spec §12.4.
+See ’.design/pipeline-mechanics.md’ §10 and spec §12.4.
 
 ---
 
