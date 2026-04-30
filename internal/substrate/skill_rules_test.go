@@ -68,6 +68,50 @@ func TestWritingPlansSkill_ExistsAndHasBonesRepo(t *testing.T) {
 	}
 }
 
+// TestOrchestratorModeSkill_SteeringLiveSubharnesses asserts Bug 21: the
+// orchestrator-mode skill contains a "Steering live subharnesses" section
+// covering scion message outbound, AskUserQuestion + SessionStop inbound,
+// cadence rules, priority decision tree, and four-axis routing of
+// AskUserQuestion through the escalation classifier.
+func TestOrchestratorModeSkill_SteeringLiveSubharnesses(t *testing.T) {
+	phrases := []string{
+		"Steering live subharnesses",
+		"broadcast",
+		"scion message",
+		"AskUserQuestion",
+		"SessionStop",
+		"2 minutes",
+		"taste",
+		"architecture",
+		"ethics",
+		"reversibility",
+	}
+
+	// Embedded copy.
+	body, err := fs.ReadFile(EmbeddedFS(), "data/skills/orchestrator-mode/SKILL.md")
+	if err != nil {
+		t.Fatalf("orchestrator-mode embedded skill missing: %v", err)
+	}
+	s := string(body)
+	for _, phrase := range phrases {
+		if !strings.Contains(s, phrase) {
+			t.Errorf("embedded orchestrator-mode skill missing required phrase: %q", phrase)
+		}
+	}
+
+	// Canonical source copy.
+	canon, err := os.ReadFile("../../.claude/skills/orchestrator-mode/SKILL.md")
+	if err != nil {
+		t.Fatalf("canonical .claude/skills/orchestrator-mode/SKILL.md missing: %v", err)
+	}
+	cs := string(canon)
+	for _, phrase := range phrases {
+		if !strings.Contains(cs, phrase) {
+			t.Errorf("canonical orchestrator-mode skill missing required phrase: %q", phrase)
+		}
+	}
+}
+
 // TestOrchestratorModeSkill_ArchitectureAxis asserts Bug 13: architecture
 // is the 4th deferral axis in the escalation gate alongside taste, ethics,
 // and reversibility. Both the orchestrator-mode and subagent-to-subharness

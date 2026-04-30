@@ -240,6 +240,55 @@ The 3-strikes ceiling is deliberate: a worker that hangs three times in a row is
 
 After every redispatch (whether terminal or not), append an audit entry with `type: dispatch`, `outcome: ratified`, payload including `target_role`, `agent_name`, and a note that this was a redispatch (e.g. `payload.redispatch_of: "<previous decision_id>"`). This makes `darken history` show the recovery loop.
 
+## Steering live subharnesses
+
+### Outbound: sending instructions mid-flight
+
+Use `scion message` to reach a running subharness without stopping it.
+
+Single-agent message:
+```bash
+scion message <agent-name> "your updated instruction" --notify
+```
+
+Broadcast to all running agents:
+```bash
+scion message --broadcast "halt; await orchestrator signal before next commit" --notify
+```
+
+Only message when the subharness is between tool calls. Messaging during mid-tool execution is swallowed by the TUI buffer and rarely surfaces cleanly. If `scion look <name>` shows a tool running (file edit, bash, test run), wait for it to complete before sending.
+
+Cadence rule: do not poll or message faster than 2 minutes per agent. Rapid-fire messages produce duplicate handling; the harness has no dedup layer.
+
+### Inbound: receiving messages from subharnesses
+
+Subharnesses route inbound signals two ways:
+
+1. **AskUserQuestion** -- the harness needs operator input. The hook fires, pauses the agent, and surfaces the question to the orchestrator session. You see it as a notification.
+2. **SessionStop** -- the harness hit a terminal condition (success or unrecoverable error). Forward-reference: Bug 17 wires these hooks into the substrate; until Bug 17 lands, monitor via `scion look` heartbeat.
+
+When an AskUserQuestion arrives, run it through the four-axis escalation classifier before answering:
+
+| Axis | Route if unclear |
+|---|---|
+| taste | answer directly; log rationale |
+| architecture | escalate to operator; do not self-ratify |
+| ethics | escalate immediately; do not self-ratify |
+| reversibility | escalate if change is hard to undo; else answer directly |
+
+The classifier fires on every inbound question, not just suspicious ones. Low-confidence answers on architecture or reversibility always escalate.
+
+### Priority decision tree
+
+When a subharness message or AskUserQuestion arrives, triage in this order:
+
+1. **Hard stop** -- ethics violation, credential exposure, destructive op outside worktree -> send `scion message <name> "stop immediately"` and escalate to operator.
+2. **Redirect** -- task is mis-specified or scope has shifted -> send corrected instruction via `scion message`; log the redirect in the audit trail.
+3. **Ack-only** -- harness is reporting progress, no action needed -> append audit entry; no reply required.
+4. **Hands-off** -- harness is operating correctly within spec -> do nothing; monitor via heartbeat.
+
+Default to hands-off unless the classifier fires a higher priority.
+
 ## What this skill is NOT
 
 - Not a substitute for the containerized `.scion/templates/orchestrator/` system-prompt -- that one runs in a container; this one runs in your host session.
