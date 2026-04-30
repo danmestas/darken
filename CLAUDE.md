@@ -33,8 +33,11 @@ The `caveman` skill (mounted in every container; available globally on host) gov
 ## Operator-side quick reference
 
 ```bash
-# One-time setup (new project)
-darken setup
+# Bring up a new project (chains bones up by default; pass --no-bones to skip)
+darken up
+
+# Tear it down
+darken down --yes
 
 # After `brew upgrade darken`
 darken upgrade-init
