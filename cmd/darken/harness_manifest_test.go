@@ -1,12 +1,9 @@
 package main
 
 import (
-	"io/fs"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/danmestas/darken/internal/substrate"
 )
 
 func TestLoadHarnessManifest_ParsesBackendAndSkills(t *testing.T) {
@@ -113,38 +110,6 @@ func TestLoadHarnessManifest_EmptyCommandArgs(t *testing.T) {
 	}
 	if len(m.CommandArgs) != 0 {
 		t.Errorf("CommandArgs: want empty, got %v", m.CommandArgs)
-	}
-}
-
-// TestTddImplementerManifest_HasBetasFlag asserts the embedded tdd-implementer
-// manifest declares command_args with the 1M-context betas flag. This is the
-// regression anchor for Bug 24.
-func TestTddImplementerManifest_HasBetasFlag(t *testing.T) {
-	efs := substrate.EmbeddedFS()
-	path := "data/.scion/templates/tdd-implementer/scion-agent.yaml"
-	body, err := fs.ReadFile(efs, path)
-	if err != nil {
-		t.Fatalf("cannot read embedded tdd-implementer manifest: %v", err)
-	}
-	m, err := loadHarnessManifest(body)
-	if err != nil {
-		t.Fatalf("parse manifest: %v", err)
-	}
-	hasBetas := false
-	hasContext := false
-	for _, arg := range m.CommandArgs {
-		if arg == "--betas" {
-			hasBetas = true
-		}
-		if strings.Contains(arg, "context-1m") {
-			hasContext = true
-		}
-	}
-	if !hasBetas {
-		t.Errorf("tdd-implementer CommandArgs missing --betas flag; got: %v", m.CommandArgs)
-	}
-	if !hasContext {
-		t.Errorf("tdd-implementer CommandArgs missing context-1m beta; got: %v", m.CommandArgs)
 	}
 }
 

@@ -16,8 +16,5 @@ volumes:
   - source: ./.scion/skills-staging/planner-t3/
     target: /home/scion/skills/role/
     read_only: true
-command_args:
-  - --betas
-  - context-1m-2025-08-07
 hub:
   endpoint: ${DARKEN_HUB_ENDPOINT}

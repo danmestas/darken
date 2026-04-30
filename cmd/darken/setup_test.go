@@ -301,3 +301,38 @@ func TestSetup_TemplateUploadFailureAbortsSetup(t *testing.T) {
 		t.Fatal("expected setup to fail when template upload fails")
 	}
 }
+
+// TestSetup_GroveInit_UsesTargetDir_NotCwd confirms that ensureGroveInit
+// uses the explicit setup target directory, not the process working directory.
+// This guards against the divergence where `darken setup /path/to/project`
+// is run from a different directory: grove init must happen in /path/to/project.
+func TestSetup_GroveInit_UsesTargetDir_NotCwd(t *testing.T) {
+	targetDir := t.TempDir()
+	otherDir := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", targetDir)
+	stubAllBinariesForSetup(t)
+
+	// cwd is otherDir — NOT the setup target.
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(prev) })
+	if err := os.Chdir(otherDir); err != nil {
+		t.Fatal(err)
+	}
+
+	mc := &mockScionClient{
+		serverStatusOut: "Status: ok\n",
+		secretListOut:   "claude_auth\ncodex_auth\n",
+	}
+	setDefaultClient(t, mc)
+
+	if err := runSetup([]string{targetDir}); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	if mc.groveInitDir != targetDir {
+		t.Errorf("GroveInit used dir %q; want %q (the setup target, not cwd %q)",
+			mc.groveInitDir, targetDir, otherDir)
+	}
+}

@@ -8,8 +8,5 @@ model: claude-haiku-4-5-20251001
 max_turns: 100
 max_duration: "8h"
 detached: true
-command_args:
-  - --betas
-  - context-1m-2025-08-07
 hub:
   endpoint: ${DARKEN_HUB_ENDPOINT}

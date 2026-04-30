@@ -104,28 +104,39 @@ fi
 #
 # claude --dangerously-skip-permissions does NOT suppress the interactive TUI
 # dialog that fires when Claude Code writes to .claude/skills. Skill-editing
-# agents block on that dialog until a human presses Y. Fix: write a project-
-# level settings.json that adds an explicit allow entry for .claude/skills
-# before the session starts. This is idempotent: if the file already contains
-# the entry we leave it untouched; if it is absent or empty we write it.
+# agents block on that dialog until a human presses Y. Fix: merge explicit
+# allow entries for .claude/skills into the existing settings.json using jq,
+# preserving all other top-level keys, permissions.deny, existing allow rules,
+# and hooks. Only missing Darken-owned rules are appended.
 
 CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
 mkdir -p "${HOME}/.claude"
 
-if [[ ! -f "${CLAUDE_SETTINGS}" ]] || ! grep -q '\.claude/skills' "${CLAUDE_SETTINGS}" 2>/dev/null; then
-  cat > "${CLAUDE_SETTINGS}" <<'SETTINGS_EOF'
-{
-  "permissions": {
-    "allow": [
-      "Write(**/.claude/skills/**)",
-      "Edit(**/.claude/skills/**)",
-      "Bash(mkdir -p **/.claude/skills/**)"
-    ],
-    "deny": []
-  }
-}
-SETTINGS_EOF
-  echo "darkish-prelude: wrote .claude/skills permissions to ${CLAUDE_SETTINGS}" >&2
+if command -v jq >/dev/null 2>&1; then
+  if [[ -f "${CLAUDE_SETTINGS}" ]]; then
+    _SKILLS_BASE="$(cat "${CLAUDE_SETTINGS}")"
+  else
+    _SKILLS_BASE='{}'
+  fi
+  echo "${_SKILLS_BASE}" | jq '
+    .permissions       = (.permissions       // {}) |
+    .permissions.allow = (.permissions.allow // []) |
+    .permissions.deny  = (.permissions.deny  // []) |
+    reduce (
+      ["Write(**/.claude/skills/**)",
+       "Edit(**/.claude/skills/**)",
+       "Bash(mkdir -p **/.claude/skills/**)"][]
+    ) as $r (
+      .;
+      if (.permissions.allow | map(select(. == $r)) | length) == 0
+      then .permissions.allow += [$r]
+      else .
+      end
+    )
+  ' > "${CLAUDE_SETTINGS}.tmp" && mv "${CLAUDE_SETTINGS}.tmp" "${CLAUDE_SETTINGS}"
+  echo "darkish-prelude: merged .claude/skills permissions into ${CLAUDE_SETTINGS}" >&2
+else
+  echo "darkish-prelude: WARNING — no jq; .claude/skills permissions not configured" >&2
 fi
 
 # --- 5. Heartbeat URL fix (work around scion broker SCION_HUB_URL = localhost) ---
@@ -180,23 +191,36 @@ if command -v jq >/dev/null 2>&1; then
   else
     EXISTING_SETTINGS='{}'
   fi
+  # Idempotent: append each hook entry only when no existing entry for this
+  # command is already present. De-duplicates by command path so persistent
+  # container homes do not accumulate duplicate operator messages across runs.
   echo "${EXISTING_SETTINGS}" | jq --arg cmd "${DARKEN_HOOK_SCRIPT}" '
     .hooks = (.hooks // {}) |
     .hooks.Stop = (
-      (.hooks.Stop // []) + [{
+      (.hooks.Stop // []) as $existing |
+      if any($existing[]; .hooks[]?.command == $cmd) | not
+      then $existing + [{
         "hooks": [{"type": "command", "command": $cmd,
                    "env": {"DARKISH_HOOK_EVENT": "Stop"}}]
       }]
+      else $existing
+      end
     ) |
     .hooks.PreToolUse = (
-      (.hooks.PreToolUse // []) + [{
+      (.hooks.PreToolUse // []) as $existing |
+      if any($existing[];
+             .matcher == "AskFollowupQuestion" and
+             (.hooks[]?.command == $cmd)) | not
+      then $existing + [{
         "matcher": "AskFollowupQuestion",
         "hooks": [{"type": "command", "command": $cmd,
                    "env": {"DARKISH_HOOK_EVENT": "AskFollowupQuestion"}}]
       }]
+      else $existing
+      end
     )
   ' > "${DARKEN_SETTINGS}.tmp" && mv "${DARKEN_SETTINGS}.tmp" "${DARKEN_SETTINGS}"
-  echo "darkish-prelude: operator notification hooks written to ${DARKEN_SETTINGS}" >&2
+  echo "darkish-prelude: operator notification hooks merged into ${DARKEN_SETTINGS}" >&2
 else
   echo "darkish-prelude: WARNING -- jq not found, operator notification hooks not configured" >&2
 fi
