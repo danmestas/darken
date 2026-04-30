@@ -295,7 +295,7 @@ func TestCheckScion_CLIPresentDaemonDown(t *testing.T) {
 	}
 }
 
-func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
+func TestDoctorBroad_FooterMentionsUpOnFailure(t *testing.T) {
 	// Stub scion to exit non-zero so checkScion fails.
 	stubDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(stubDir, "scion"),
@@ -314,8 +314,8 @@ func TestDoctorBroad_FooterMentionsSetupOnFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected doctor to fail when scion is broken")
 	}
-	if !strings.Contains(report, "darken setup") {
-		t.Fatalf("failure report should mention `darken setup`:\n%s", report)
+	if !strings.Contains(report, "darken up") {
+		t.Fatalf("failure report should mention `darken up`:\n%s", report)
 	}
 }
 

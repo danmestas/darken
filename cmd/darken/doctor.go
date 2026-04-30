@@ -212,7 +212,7 @@ func doctorBroad() (string, error) {
 	}
 
 	if len(failed) > 0 {
-		sb.WriteString("\n→ for a fresh project, run `darken setup` to bring everything online\n")
+		sb.WriteString("\n→ for a fresh project, run `darken up` to bring everything online\n")
 		return sb.String(), fmt.Errorf("%d checks failed: %s", len(failed), strings.Join(failed, ", "))
 	}
 	return sb.String(), nil
