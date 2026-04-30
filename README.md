@@ -26,10 +26,18 @@ The `darken` binary is self-contained — templates, scripts, Dockerfiles, and t
 **Fresh project:**
 
 ```bash
-darken setup
+darken up
 ```
 
-That's it — scaffolds CLAUDE.md, stages skills, ensures Docker/scion/images/secrets, and runs `bones init`.
+That's it — scaffolds CLAUDE.md, stages skills, ensures Docker/scion/images/secrets, and chains `bones up`. Pass `--no-bones` to skip the bones chain.
+
+**Tear it back down:**
+
+```bash
+darken down --yes
+```
+
+Stops project agents, deletes the project grove, removes scaffolds, runs `bones down`. Add `--purge` to also stop the scion server and clean user-scope hub templates.
 
 **Existing project, post-`brew upgrade darken`:**
 
