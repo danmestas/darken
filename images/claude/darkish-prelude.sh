@@ -148,11 +148,18 @@ fi
 # agent for missed heartbeats. Override here using the per-template
 # DARKEN_HUB_ENDPOINT (set by scion-cmd helper) or fall back to the
 # documented default.
-if [[ "${SCION_HUB_URL:-}" == http://localhost:8080 || "${SCION_HUB_ENDPOINT:-}" == http://localhost:8080 ]]; then
+_needs_hub_override() {
+  case "$1" in
+    http://localhost:8080) return 0 ;;
+    *'${'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+if _needs_hub_override "${SCION_HUB_URL:-}" || _needs_hub_override "${SCION_HUB_ENDPOINT:-}"; then
   HUB_OVERRIDE="${DARKEN_HUB_ENDPOINT:-http://host.docker.internal:8080}"
   export SCION_HUB_URL="${HUB_OVERRIDE}"
   export SCION_HUB_ENDPOINT="${HUB_OVERRIDE}"
-  echo "darkish-prelude: SCION_HUB_URL and SCION_HUB_ENDPOINT overridden to ${HUB_OVERRIDE} (broker-localhost workaround)" >&2
+  echo "darkish-prelude: SCION_HUB_URL and SCION_HUB_ENDPOINT overridden to ${HUB_OVERRIDE} (localhost or unexpanded placeholder)" >&2
 fi
 
 # --- 6. Operator notification hooks ------------------------------------------
