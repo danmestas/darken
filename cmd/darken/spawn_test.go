@@ -220,3 +220,33 @@ esac
 		t.Errorf("context-1m-2025-08-07 must not be forwarded to scion start; args: %s", args)
 	}
 }
+
+// TestSpawn_ManifestParseError_IsFatal asserts that runSpawn returns a non-nil
+// error when the manifest for the requested role exists on disk but cannot be
+// parsed (e.g. unknown backend). Silently degrading on parse errors hides
+// configuration mistakes that should be fixed before the agent starts.
+func TestSpawn_ManifestParseError_IsFatal(t *testing.T) {
+	// Write a manifest with an unknown backend value so loadHarnessManifest
+	// returns a parse error (not a file-not-found error).
+	tmpDir := t.TempDir()
+	harnessDir := filepath.Join(tmpDir, "bad-role")
+	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	badManifest := "default_harness_config: totally-unknown-backend\n"
+	if err := os.WriteFile(filepath.Join(harnessDir, "scion-agent.yaml"),
+		[]byte(badManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DARKEN_TEMPLATES_DIR", tmpDir)
+
+	// --no-stage skips credential/skills staging so the test only exercises
+	// the manifest-load path.
+	err := runSpawn([]string{"bad-agent", "--type", "bad-role", "--no-stage", "task"})
+	if err == nil {
+		t.Fatal("expected error for malformed manifest, got nil")
+	}
+	if !strings.Contains(err.Error(), "manifest") {
+		t.Errorf("error should mention 'manifest'; got: %v", err)
+	}
+}

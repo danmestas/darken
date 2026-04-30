@@ -38,6 +38,15 @@ func runSpawn(args []string) error {
 		}
 	}
 
+	// Validate the manifest before attempting to start the agent. A parse
+	// error in a known role's manifest is a configuration mistake that must
+	// be fixed; silently degrading would let a broken manifest produce an
+	// agent with missing context or wrong backend.
+	// A missing manifest (ErrNotExist) is non-fatal: the role may not have a
+	// local template tree in this workspace.
+	if _, err := loadManifestForRole(*harnessType); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("spawn: manifest for role %q: %w", *harnessType, err)
+	}
 	// TODO(upstream-scion): manifest command_args are intentionally not
 	// forwarded to scion start. scion start has no --betas flag; passing raw
 	// harness flags through the orchestration CLI crosses an abstraction
