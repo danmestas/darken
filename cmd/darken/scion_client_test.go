@@ -17,10 +17,14 @@ type mockScionClient struct {
 	brokerProvideErr error
 	pushTemplateErr  error
 	groveInitErr     error
+	lookAgentOut     []byte
+	lookAgentErr     error
 
 	startAgentCalls   [][]string
 	pushTemplateCalls []string
 	groveInitCalls    int
+	groveInitDir      string
+	lookAgentCalls    []string
 }
 
 func (m *mockScionClient) ServerStatus() (string, error) {
@@ -40,9 +44,14 @@ func (m *mockScionClient) PushTemplate(role string) error {
 	m.pushTemplateCalls = append(m.pushTemplateCalls, role)
 	return m.pushTemplateErr
 }
-func (m *mockScionClient) GroveInit() error {
+func (m *mockScionClient) GroveInit(targetDir string) error {
 	m.groveInitCalls++
+	m.groveInitDir = targetDir
 	return m.groveInitErr
+}
+func (m *mockScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {
+	m.lookAgentCalls = append(m.lookAgentCalls, name)
+	return m.lookAgentOut, m.lookAgentErr
 }
 
 // setDefaultClient replaces defaultScionClient for the duration of the test.
