@@ -115,12 +115,17 @@ PYEOF
 }
 
 do_rebuild() {
-  rm -rf "${STAGE_DIR}"
-  mkdir -p "${STAGE_DIR}"
+  # Use a per-process temp dir so parallel invocations never share a
+  # destination during cp.  The final rename is the only shared
+  # operation; the last writer wins and both processes exit 0.
+  local stage_tmp="${STAGE_DIR}.tmp.$$"
+  rm -rf "${stage_tmp}"
+  mkdir -p "${stage_tmp}"
   local refs
   refs="$(read_skills_from_manifest || true)"
   if [[ -z "${refs}" ]]; then
     echo "stage-skills: no role skills declared for ${HARNESS}" >&2
+    rm -rf "${stage_tmp}"
     return 0
   fi
   while IFS= read -r ref; do
@@ -128,14 +133,17 @@ do_rebuild() {
     local src dest name
     src="$(resolve_ref "${ref}")"
     name="${ref##*/}"
-    dest="${STAGE_DIR}/${name}"
+    dest="${stage_tmp}/${name}"
     if [[ ! -d "${src}" ]]; then
       echo "stage-skills: source skill missing at ${src}" >&2
+      rm -rf "${stage_tmp}"
       return 1
     fi
     cp -R "${src}" "${dest}"
-    echo "stage-skills: copied ${name} → ${dest}"
+    echo "stage-skills: copied ${name} → ${STAGE_DIR}/${name}"
   done <<< "${refs}"
+  rm -rf "${STAGE_DIR}"
+  mv "${stage_tmp}" "${STAGE_DIR}"
 }
 
 do_diff() {
