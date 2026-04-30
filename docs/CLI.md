@@ -8,10 +8,12 @@ Use these for the standard project lifecycle.
 
 | Command | Purpose |
 |---|---|
-| `darken setup` | One-shot fresh-repo onboarding (init + bootstrap) |
+| `darken up` | Bring the project up: scaffold + machine prereqs + `bones up` (one-shot fresh-repo onboarding). Pass `--no-bones` to skip the bones chain. |
+| `darken down` | Tear the project down: stop agents + delete project grove + uninstall scaffolds + `bones down`. Pass `--yes` for non-interactive, `--no-bones` to skip, `--purge` for host-wide cleanup. |
+| `darken setup` | Deprecated alias for `darken up`. |
 | `darken upgrade-init` | Refresh project scaffolds after `brew upgrade darken` |
 | `darken uninstall-init` | Remove project scaffolds (preserves customizations + .scion/ runtime state) |
-| `darken init` | Project-only scaffolds (CLAUDE.md, .claude/skills/, .gitignore). Prefer `setup` for first-time use. |
+| `darken init` | Project-only scaffolds (CLAUDE.md, .claude/skills/, .gitignore). Prefer `up` for first-time use. |
 
 ## Operations (the §7 loop)
 
@@ -38,7 +40,7 @@ Check state, recent decisions, and version coherence.
 
 ## Targeted setup
 
-Use these for surgical operations when full `setup` is overkill.
+Use these for surgical operations when full `up` is overkill.
 
 | Command | Purpose |
 |---|---|

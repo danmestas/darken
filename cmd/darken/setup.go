@@ -1,9 +1,6 @@
-// Package main — `darken setup` is the fresh-repo onboarding shortcut.
-// Composes runInit + runBootstrap + template upload. Single flag (--force)
-// passes through to runInit for CLAUDE.md overwrite.
-//
-// For the existing-repo / post-`brew upgrade darken` path, see
-// runUpgradeInit instead.
+// Package main — `darken setup` is the deprecated alias for `darken up`.
+// The runSetup function lives in up.go now; this file holds the
+// helpers shared between up and bootstrap.
 package main
 
 import (
@@ -13,25 +10,6 @@ import (
 	"os"
 	"path/filepath"
 )
-
-func runSetup(args []string) error {
-	// Resolve the setup target once so that ensureGroveInit operates on the
-	// same directory that runInit writes to, regardless of cwd.
-	target, err := resolveInitTarget(args)
-	if err != nil {
-		return err
-	}
-	if err := runInit(args); err != nil {
-		return err
-	}
-	if err := ensureGroveInit(target); err != nil {
-		return err
-	}
-	if err := runBootstrap(nil); err != nil {
-		return err
-	}
-	return uploadAllTemplatesToHub()
-}
 
 // resolveInitTarget parses the same flag set as runInit and returns the
 // absolute path of the target directory. This is intentionally kept in sync
