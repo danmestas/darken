@@ -169,15 +169,17 @@ func TestRunSpawn_FailsWithoutType(t *testing.T) {
 	}
 }
 
-// TestSpawn_ForwardsCommandArgsFromManifest verifies that runSpawn reads
-// command_args from the manifest and forwards them to StartAgent. Uses a
-// mock client to capture what StartAgent receives.
-func TestSpawn_ForwardsCommandArgsFromManifest(t *testing.T) {
+// TestSpawn_DoesNotForwardCommandArgsToScion asserts that runSpawn does NOT
+// append manifest command_args to the scion start argv. scion start has no
+// --betas flag; forwarding raw harness flags through the orchestration CLI
+// crosses the abstraction boundary. command_args stays readable in the struct
+// but is a no-op until upstream scion exposes harness-level flag routing.
+func TestSpawn_DoesNotForwardCommandArgsToScion(t *testing.T) {
 	mc := &mockScionClient{}
 	setDefaultClient(t, mc)
 
-	// Create a temporary templates dir with a custom manifest that has
-	// command_args. No canonical skills dir needed because we use --no-stage.
+	// Create a temporary templates dir with a manifest that declares command_args.
+	// No canonical skills dir needed because we use --no-stage.
 	tmpDir := t.TempDir()
 	harnessDir := filepath.Join(tmpDir, "custom-role")
 	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
@@ -210,10 +212,11 @@ esac
 		t.Fatal("StartAgent was not called")
 	}
 	args := strings.Join(mc.startAgentCalls[0], " ")
-	if !strings.Contains(args, "--betas") {
-		t.Errorf("--betas not forwarded to StartAgent; args: %s", args)
+	// command_args must NOT be forwarded to scion start.
+	if strings.Contains(args, "--betas") {
+		t.Errorf("--betas must not be forwarded to scion start; args: %s", args)
 	}
-	if !strings.Contains(args, "context-1m-2025-08-07") {
-		t.Errorf("context-1m-2025-08-07 not forwarded to StartAgent; args: %s", args)
+	if strings.Contains(args, "context-1m-2025-08-07") {
+		t.Errorf("context-1m-2025-08-07 must not be forwarded to scion start; args: %s", args)
 	}
 }
