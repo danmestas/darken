@@ -4,7 +4,7 @@ agent_instructions: agents.md
 system_prompt: system-prompt.md
 default_harness_config: claude
 image: local/darkish-claude:latest
-model: claude-sonnet-4-6
+model: claude-sonnet-4-6[1m]
 max_turns: 100
 max_duration: "2h"
 detached: false
