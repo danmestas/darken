@@ -100,7 +100,35 @@ if [[ -n "${SCION_GIT_CLONE_URL:-}" && -n "${GITHUB_TOKEN:-}" && ! -d /workspace
   fi
 fi
 
-# --- 4. Heartbeat URL fix (work around scion broker SCION_HUB_URL = localhost) ---
+# --- 4. Pre-allow .claude/skills writes in Claude Code settings.json ----------
+#
+# claude --dangerously-skip-permissions does NOT suppress the interactive TUI
+# dialog that fires when Claude Code writes to .claude/skills. Skill-editing
+# agents block on that dialog until a human presses Y. Fix: write a project-
+# level settings.json that adds an explicit allow entry for .claude/skills
+# before the session starts. This is idempotent: if the file already contains
+# the entry we leave it untouched; if it is absent or empty we write it.
+
+CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+mkdir -p "${HOME}/.claude"
+
+if [[ ! -f "${CLAUDE_SETTINGS}" ]] || ! grep -q '\.claude/skills' "${CLAUDE_SETTINGS}" 2>/dev/null; then
+  cat > "${CLAUDE_SETTINGS}" <<'SETTINGS_EOF'
+{
+  "permissions": {
+    "allow": [
+      "Write(**/.claude/skills/**)",
+      "Edit(**/.claude/skills/**)",
+      "Bash(mkdir -p **/.claude/skills/**)"
+    ],
+    "deny": []
+  }
+}
+SETTINGS_EOF
+  echo "darkish-prelude: wrote .claude/skills permissions to ${CLAUDE_SETTINGS}" >&2
+fi
+
+# --- 5. Heartbeat URL fix (work around scion broker SCION_HUB_URL = localhost) ---
 #
 # Scion's broker injects SCION_HUB_URL=http://localhost:8080 into the
 # container based on its bind address, ignoring per-template hub.endpoint.
@@ -116,7 +144,64 @@ if [[ "${SCION_HUB_URL:-}" == http://localhost:8080 || "${SCION_HUB_ENDPOINT:-}"
   echo "darkish-prelude: SCION_HUB_URL and SCION_HUB_ENDPOINT overridden to ${HUB_OVERRIDE} (broker-localhost workaround)" >&2
 fi
 
-# --- 5. Hand off to scion ----------------------------------------------------
+# --- 6. Operator notification hooks ------------------------------------------
+#
+# Write a Claude Code Stop hook so SessionStop events route to the
+# operator via scion message.  The recipient is read from
+# DARKEN_HOOK_RECIPIENT (default: user:Development User).
+#
+# The hook also fires on PreToolUse:AskFollowupQuestion so question
+# events are forwarded before the session fully stops.
+#
+# Implementation: write a self-contained hook script, then merge the
+# hook declarations into ~/.claude/settings.json using jq.
+
+DARKEN_HOOKS_DIR="${HOME}/.claude/hooks"
+DARKEN_HOOK_SCRIPT="${DARKEN_HOOKS_DIR}/notify-operator.sh"
+DARKEN_SETTINGS="${HOME}/.claude/settings.json"
+
+mkdir -p "${DARKEN_HOOKS_DIR}"
+
+cat > "${DARKEN_HOOK_SCRIPT}" << 'HOOKEOF'
+#!/usr/bin/env bash
+# Darkish Factory subharness: route Stop/AskFollowupQuestion events to operator.
+set -uo pipefail
+RECIPIENT="${DARKEN_HOOK_RECIPIENT:-user:Development User}"
+AGENT="${SCION_AGENT_NAME:-unknown}"
+EVENT="${DARKISH_HOOK_EVENT:-Stop}"
+scion message --to "${RECIPIENT}" \
+  "darkish hook ${EVENT}: agent ${AGENT}" 2>/dev/null || true
+HOOKEOF
+chmod +x "${DARKEN_HOOK_SCRIPT}"
+
+if command -v jq >/dev/null 2>&1; then
+  if [[ -f "${DARKEN_SETTINGS}" ]]; then
+    EXISTING_SETTINGS="$(cat "${DARKEN_SETTINGS}")"
+  else
+    EXISTING_SETTINGS='{}'
+  fi
+  echo "${EXISTING_SETTINGS}" | jq --arg cmd "${DARKEN_HOOK_SCRIPT}" '
+    .hooks = (.hooks // {}) |
+    .hooks.Stop = (
+      (.hooks.Stop // []) + [{
+        "hooks": [{"type": "command", "command": $cmd,
+                   "env": {"DARKISH_HOOK_EVENT": "Stop"}}]
+      }]
+    ) |
+    .hooks.PreToolUse = (
+      (.hooks.PreToolUse // []) + [{
+        "matcher": "AskFollowupQuestion",
+        "hooks": [{"type": "command", "command": $cmd,
+                   "env": {"DARKISH_HOOK_EVENT": "AskFollowupQuestion"}}]
+      }]
+    )
+  ' > "${DARKEN_SETTINGS}.tmp" && mv "${DARKEN_SETTINGS}.tmp" "${DARKEN_SETTINGS}"
+  echo "darkish-prelude: operator notification hooks written to ${DARKEN_SETTINGS}" >&2
+else
+  echo "darkish-prelude: WARNING -- jq not found, operator notification hooks not configured" >&2
+fi
+
+# --- 7. Hand off to scion ----------------------------------------------------
 
 # Resolve sciontool from PATH; the scion-claude image installs it but the
 # absolute path varies by release.

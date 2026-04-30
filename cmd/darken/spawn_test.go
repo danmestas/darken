@@ -168,3 +168,52 @@ func TestRunSpawn_FailsWithoutType(t *testing.T) {
 		t.Fatal("expected error when --type is missing, got nil")
 	}
 }
+
+// TestSpawn_ForwardsCommandArgsFromManifest verifies that runSpawn reads
+// command_args from the manifest and forwards them to StartAgent. Uses a
+// mock client to capture what StartAgent receives.
+func TestSpawn_ForwardsCommandArgsFromManifest(t *testing.T) {
+	mc := &mockScionClient{}
+	setDefaultClient(t, mc)
+
+	// Create a temporary templates dir with a custom manifest that has
+	// command_args. No canonical skills dir needed because we use --no-stage.
+	tmpDir := t.TempDir()
+	harnessDir := filepath.Join(tmpDir, "custom-role")
+	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "default_harness_config: claude\ncommand_args:\n  - --betas\n  - context-1m-2025-08-07\n"
+	if err := os.WriteFile(filepath.Join(harnessDir, "scion-agent.yaml"),
+		[]byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DARKEN_TEMPLATES_DIR", tmpDir)
+
+	// Scion stub for the readiness poller only (start is handled by mock).
+	stubDir := t.TempDir()
+	scionStub := `#!/bin/sh
+case "$1" in
+  list) echo '[{"name":"cmd-agent","phase":"running"}]'; exit 0 ;;
+  *)    exit 0 ;;
+esac
+`
+	os.WriteFile(filepath.Join(stubDir, "scion"), []byte(scionStub), 0o755)
+	os.WriteFile(filepath.Join(stubDir, "bash"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	if err := runSpawn([]string{"cmd-agent", "--type", "custom-role", "--no-stage", "task"}); err != nil {
+		t.Fatalf("runSpawn: %v", err)
+	}
+
+	if len(mc.startAgentCalls) == 0 {
+		t.Fatal("StartAgent was not called")
+	}
+	args := strings.Join(mc.startAgentCalls[0], " ")
+	if !strings.Contains(args, "--betas") {
+		t.Errorf("--betas not forwarded to StartAgent; args: %s", args)
+	}
+	if !strings.Contains(args, "context-1m-2025-08-07") {
+		t.Errorf("context-1m-2025-08-07 not forwarded to StartAgent; args: %s", args)
+	}
+}

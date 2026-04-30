@@ -38,10 +38,20 @@ func runSpawn(args []string) error {
 		}
 	}
 
+	// Load command_args from the manifest (non-fatal: missing or unreadable
+	// manifests degrade gracefully — operator still gets the agent started).
+	var extraArgs []string
+	if m, err := loadManifestForRole(*harnessType); err == nil {
+		extraArgs = m.CommandArgs
+	}
+
 	startArgs := []string{"--type", *harnessType}
 	if *backend != "" {
 		image := fmt.Sprintf("local/darkish-%s:latest", *backend)
 		startArgs = append(startArgs, "--harness", *backend, "--image", image)
+	}
+	if len(extraArgs) > 0 {
+		startArgs = append(startArgs, extraArgs...)
 	}
 	if len(posArgs) > 0 {
 		startArgs = append(startArgs, posArgs...)

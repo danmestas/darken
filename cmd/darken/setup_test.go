@@ -203,6 +203,76 @@ func TestSetup_UploadsAllTemplatesToHub(t *testing.T) {
 	}
 }
 
+// TestSetup_GroveInit_InvokedOnce confirms runSetup calls GroveInit exactly
+// once when no .scion/grove-id file is present (fresh project).
+func TestSetup_GroveInit_InvokedOnce(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	stubAllBinariesForSetup(t)
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(prev) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+
+	mc := &mockScionClient{
+		serverStatusOut: "Status: ok\n",
+		secretListOut:   "claude_auth\ncodex_auth\n",
+	}
+	setDefaultClient(t, mc)
+
+	if err := runSetup(nil); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	if mc.groveInitCalls != 1 {
+		t.Errorf("GroveInit called %d times; want 1 (fresh project, no grove-id)", mc.groveInitCalls)
+	}
+}
+
+// TestSetup_GroveInit_SkippedOnReSetup confirms runSetup does NOT call
+// GroveInit when .scion/grove-id already exists (idempotent guard).
+func TestSetup_GroveInit_SkippedOnReSetup(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	stubAllBinariesForSetup(t)
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(prev) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-plant a grove-id file to simulate an already-initialised project.
+	scionDir := filepath.Join(root, ".scion")
+	if err := os.MkdirAll(scionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scionDir, "grove-id"),
+		[]byte("existing-grove-uuid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mc := &mockScionClient{
+		serverStatusOut: "Status: ok\n",
+		secretListOut:   "claude_auth\ncodex_auth\n",
+	}
+	setDefaultClient(t, mc)
+
+	if err := runSetup(nil); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	if mc.groveInitCalls != 0 {
+		t.Errorf("GroveInit called %d times; want 0 (grove-id already present)", mc.groveInitCalls)
+	}
+}
+
 // TestSetup_TemplateUploadFailureAbortsSetup confirms that a PushTemplate error
 // propagates and aborts setup.
 func TestSetup_TemplateUploadFailureAbortsSetup(t *testing.T) {

@@ -114,6 +114,31 @@ func copyDir(src, dst string) error {
 	})
 }
 
+// loadManifestForRole resolves and parses the scion-agent.yaml for the given
+// harnessType. Uses resolveTemplatesDir (project-local or embedded) so it works
+// in any environment where staging works. Returns an error when the manifest
+// cannot be read or parsed.
+func loadManifestForRole(harnessType string) (HarnessManifest, error) {
+	// Allow test overrides via DARKEN_TEMPLATES_DIR.
+	if dir := os.Getenv("DARKEN_TEMPLATES_DIR"); dir != "" {
+		body, err := os.ReadFile(filepath.Join(dir, harnessType, "scion-agent.yaml"))
+		if err != nil {
+			return HarnessManifest{}, fmt.Errorf("loadManifestForRole: %w", err)
+		}
+		return loadHarnessManifest(body)
+	}
+	templatesDir, cleanup, err := resolveTemplatesDir()
+	if err != nil {
+		return HarnessManifest{}, fmt.Errorf("loadManifestForRole: resolve templates: %w", err)
+	}
+	defer cleanup()
+	body, err := os.ReadFile(filepath.Join(templatesDir, harnessType, "scion-agent.yaml"))
+	if err != nil {
+		return HarnessManifest{}, fmt.Errorf("loadManifestForRole: read manifest: %w", err)
+	}
+	return loadHarnessManifest(body)
+}
+
 // stageSkillsForRole is the single entry point for skill staging called by
 // spawn. It resolves the templates directory (project-local or embedded),
 // the canonical skills source, and the output staging directory, then

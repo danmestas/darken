@@ -32,6 +32,11 @@ type ScionClient interface {
 
 	// PushTemplate uploads a role template to the hub at user (global) scope.
 	PushTemplate(role string) error
+
+	// GroveInit registers the current directory as a project-scoped scion grove.
+	// Idempotent at the caller level: callers check for .scion/grove-id before
+	// invoking this method.
+	GroveInit() error
 }
 
 // execScionClient is the production ScionClient that delegates to the scion binary.
@@ -72,6 +77,13 @@ func (c *execScionClient) BrokerProvide() error {
 
 func (c *execScionClient) PushTemplate(role string) error {
 	cmd := scionCmdWithEnv([]string{"--global", "templates", "push", role})
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (c *execScionClient) GroveInit() error {
+	cmd := scionCmdWithEnv([]string{"grove", "init"})
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

@@ -74,23 +74,40 @@ e2e-smoke:
 
 .PHONY: sync-embed-data
 sync-embed-data:
-	rm -rf $(SUBSTRATE_DATA)
+	@set -e; \
+	tmpdir=$$(mktemp -d); \
+	while IFS= read -r skill || [ -n "$$skill" ]; do \
+		[ -z "$$skill" ] && continue; \
+		case "$$skill" in \#*) continue ;; esac; \
+		if [ ! -d ".claude/skills/$$skill" ] && [ -d "$(SUBSTRATE_DATA)/skills/$$skill" ]; then \
+			cp -R "$(SUBSTRATE_DATA)/skills/$$skill" "$$tmpdir/" && \
+			echo "sync-embed-data: preserving vendored skill $$skill"; \
+		fi; \
+	done < "$(SKILLS_MANIFEST)"; \
+	rm -rf $(SUBSTRATE_DATA); \
 	mkdir -p $(SUBSTRATE_DATA)/.scion $(SUBSTRATE_DATA)/scripts \
 		$(SUBSTRATE_DATA)/images $(SUBSTRATE_DATA)/skills \
-		$(SUBSTRATE_DATA)/templates
-	cp -R .scion/templates $(SUBSTRATE_DATA)/.scion/
+		$(SUBSTRATE_DATA)/templates; \
+	cp -R .scion/templates $(SUBSTRATE_DATA)/.scion/; \
 	cp scripts/bootstrap.sh scripts/spawn.sh scripts/stage-creds.sh \
-		scripts/stage-skills.sh $(SUBSTRATE_DATA)/scripts/
-	cp images/Makefile images/README.md $(SUBSTRATE_DATA)/images/
+		scripts/stage-skills.sh $(SUBSTRATE_DATA)/scripts/; \
+	cp images/Makefile images/README.md $(SUBSTRATE_DATA)/images/; \
 	for backend in claude codex gemini pi; do \
 		mkdir -p $(SUBSTRATE_DATA)/images/$$backend && \
 		cp images/$$backend/Dockerfile images/$$backend/darkish-prelude.sh \
 			$(SUBSTRATE_DATA)/images/$$backend/; \
-	done
-	cp -R .claude/skills/orchestrator-mode $(SUBSTRATE_DATA)/skills/
-	cp -R .claude/skills/subagent-to-subharness $(SUBSTRATE_DATA)/skills/
-	cp -R .claude/skills/writing-plans $(SUBSTRATE_DATA)/skills/
-	cp -R .claude/skills/superpowers $(SUBSTRATE_DATA)/skills/
-	cp -R .claude/skills/spec-kit $(SUBSTRATE_DATA)/skills/
-	cp templates/CLAUDE.md.tmpl $(SUBSTRATE_DATA)/templates/
-	@echo "synced $(SUBSTRATE_DATA) from canonical sources"
+	done; \
+	cp -R .claude/skills/orchestrator-mode $(SUBSTRATE_DATA)/skills/; \
+	cp -R .claude/skills/subagent-to-subharness $(SUBSTRATE_DATA)/skills/; \
+	cp -R .claude/skills/writing-plans $(SUBSTRATE_DATA)/skills/; \
+	cp -R .claude/skills/superpowers $(SUBSTRATE_DATA)/skills/; \
+	cp -R .claude/skills/spec-kit $(SUBSTRATE_DATA)/skills/; \
+	cp templates/CLAUDE.md.tmpl $(SUBSTRATE_DATA)/templates/; \
+	for d in "$$tmpdir"/*/; do \
+		[ -d "$$d" ] || continue; \
+		skill=$$(basename "$$d"); \
+		cp -R "$$d" "$(SUBSTRATE_DATA)/skills/$$skill"; \
+		echo "sync-embed-data: restored vendored skill $$skill"; \
+	done; \
+	rm -rf "$$tmpdir"; \
+	echo "synced $(SUBSTRATE_DATA) from canonical sources"

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 func TestLoadHarnessManifest_ParsesBackendAndSkills(t *testing.T) {
@@ -78,6 +81,70 @@ func TestLoadHarnessManifest_SkillsAsInlineList(t *testing.T) {
 	}
 	if len(m.Skills) != 3 {
 		t.Fatalf("want 3 skills, got %d: %v", len(m.Skills), m.Skills)
+	}
+}
+
+// TestLoadHarnessManifest_ParsesCommandArgs verifies that loadHarnessManifest
+// reads the command_args block sequence from a manifest body.
+func TestLoadHarnessManifest_ParsesCommandArgs(t *testing.T) {
+	body := []byte("default_harness_config: claude\ncommand_args:\n  - --betas\n  - context-1m-2025-08-07\n")
+	m, err := loadHarnessManifest(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m.CommandArgs) != 2 {
+		t.Fatalf("CommandArgs: want 2 entries, got %d: %v", len(m.CommandArgs), m.CommandArgs)
+	}
+	if m.CommandArgs[0] != "--betas" {
+		t.Errorf("CommandArgs[0]: want --betas, got %q", m.CommandArgs[0])
+	}
+	if m.CommandArgs[1] != "context-1m-2025-08-07" {
+		t.Errorf("CommandArgs[1]: want context-1m-2025-08-07, got %q", m.CommandArgs[1])
+	}
+}
+
+// TestLoadHarnessManifest_EmptyCommandArgs verifies that a manifest without
+// command_args returns a nil or empty slice with no error.
+func TestLoadHarnessManifest_EmptyCommandArgs(t *testing.T) {
+	body := []byte("default_harness_config: codex\n")
+	m, err := loadHarnessManifest(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m.CommandArgs) != 0 {
+		t.Errorf("CommandArgs: want empty, got %v", m.CommandArgs)
+	}
+}
+
+// TestTddImplementerManifest_HasBetasFlag asserts the embedded tdd-implementer
+// manifest declares command_args with the 1M-context betas flag. This is the
+// regression anchor for Bug 24.
+func TestTddImplementerManifest_HasBetasFlag(t *testing.T) {
+	efs := substrate.EmbeddedFS()
+	path := "data/.scion/templates/tdd-implementer/scion-agent.yaml"
+	body, err := fs.ReadFile(efs, path)
+	if err != nil {
+		t.Fatalf("cannot read embedded tdd-implementer manifest: %v", err)
+	}
+	m, err := loadHarnessManifest(body)
+	if err != nil {
+		t.Fatalf("parse manifest: %v", err)
+	}
+	hasBetas := false
+	hasContext := false
+	for _, arg := range m.CommandArgs {
+		if arg == "--betas" {
+			hasBetas = true
+		}
+		if strings.Contains(arg, "context-1m") {
+			hasContext = true
+		}
+	}
+	if !hasBetas {
+		t.Errorf("tdd-implementer CommandArgs missing --betas flag; got: %v", m.CommandArgs)
+	}
+	if !hasContext {
+		t.Errorf("tdd-implementer CommandArgs missing context-1m beta; got: %v", m.CommandArgs)
 	}
 }
 
