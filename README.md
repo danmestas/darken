@@ -34,10 +34,10 @@ That's it — scaffolds CLAUDE.md, stages skills, ensures Docker/scion/images/se
 **Tear it back down:**
 
 ```bash
-darken down --yes
+darken down
 ```
 
-Stops project agents, deletes the project grove, removes scaffolds, runs `bones down`. Add `--purge` to also stop the scion server and clean user-scope hub templates.
+Stops project agents, deletes the project grove, removes scaffolds, runs `bones down`. Prompts before acting; pass `--yes` to skip the prompt in scripts. Add `--purge` to also stop the scion server and clean user-scope hub templates.
 
 **Existing project, post-`brew upgrade darken`:**
 
