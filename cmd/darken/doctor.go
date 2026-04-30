@@ -26,11 +26,12 @@ const (
 // Using a registry of DoctorCheck values replaces the old stringly-typed
 // remediationFor dispatch.
 type DoctorCheck struct {
-	ID          string       // machine-readable identifier (stable across versions)
-	Label       string       // human-readable label printed in the report
-	Severity    string       // SeverityFail or SeverityWarn
-	Run         func() error // returns nil on success, non-nil on failure
-	Remediation string       // inline remediation hint; used when Run() returns non-nil
+	ID          string        // machine-readable identifier (stable across versions)
+	Label       string        // human-readable label printed in the report
+	Severity    string        // SeverityFail or SeverityWarn
+	Run         func() error  // returns nil on success, non-nil on failure
+	Detail      func() string // optional: short detail appended to the OK line (e.g. version string)
+	Remediation string        // inline remediation hint; used when Run() returns non-nil
 }
 
 func runDoctor(args []string) error {
@@ -174,6 +175,14 @@ func doctorBroadChecks() []DoctorCheck {
 			Run:         checkHostsDockerInternal,
 			Remediation: `echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts`,
 		},
+		{
+			ID:          "bones-cli",
+			Label:       "bones CLI present",
+			Severity:    SeverityWarn,
+			Run:         checkBones,
+			Detail:      bonesVersion,
+			Remediation: "brew install bones (or run `darken up --no-bones` to skip the bones chain)",
+		},
 	}
 }
 
@@ -185,6 +194,12 @@ func doctorBroad() (string, error) {
 		err := dc.Run()
 		switch {
 		case err == nil:
+			if dc.Detail != nil {
+				if d := dc.Detail(); d != "" {
+					fmt.Fprintf(&sb, "OK    %s (%s)\n", dc.Label, d)
+					continue
+				}
+			}
 			fmt.Fprintf(&sb, "OK    %s\n", dc.Label)
 		case dc.Severity == SeverityWarn:
 			fmt.Fprintf(&sb, "WARN  %s — %v\n", dc.Label, err)
@@ -217,6 +232,34 @@ func checkScion() error {
 		return fmt.Errorf("scion not found on PATH: %w", err)
 	}
 	return nil
+}
+
+// checkBones reports whether the bones CLI is on PATH. Severity is Warn
+// because `darken up --no-bones` is a supported path; we just want the
+// operator to see when bones is missing or stale.
+func checkBones() error {
+	_, err := exec.LookPath("bones")
+	if err != nil {
+		return fmt.Errorf("bones not found on PATH (run `brew install bones`, or use --no-bones to skip the chain)")
+	}
+	return nil
+}
+
+// bonesVersion captures `bones --version` for the Detail line of the
+// bones-cli check. Returns empty on any error so the renderer falls back
+// to plain "OK". Trims whitespace and keeps the first non-empty line.
+func bonesVersion() string {
+	out, err := exec.Command("bones", "--version").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 func checkScionServer() error {
