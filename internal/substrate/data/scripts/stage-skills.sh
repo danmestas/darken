@@ -116,9 +116,12 @@ PYEOF
 
 do_rebuild() {
   # Use a per-process temp dir so parallel invocations never share a
-  # destination during cp.  The final rename is the only shared
-  # operation; the last writer wins and both processes exit 0.
+  # destination during cp.  Copy work happens outside the lock.
+  # The publish pair (rm -rf + mv) is serialized with a lock directory;
+  # mkdir is atomic on POSIX, so only one process enters the critical
+  # section at a time.
   local stage_tmp="${STAGE_DIR}.tmp.$$"
+  local lock_dir="${STAGE_DIR}.lock"
   rm -rf "${stage_tmp}"
   mkdir -p "${stage_tmp}"
   local refs
@@ -142,8 +145,21 @@ do_rebuild() {
     cp -R "${src}" "${dest}"
     echo "stage-skills: copied ${name} → ${STAGE_DIR}/${name}"
   done <<< "${refs}"
+  # Acquire publish lock (spin-wait up to ~10 s).
+  local i=0
+  while ! mkdir "${lock_dir}" 2>/dev/null; do
+    if [[ $((i++)) -ge 200 ]]; then
+      echo "stage-skills: timed out waiting for publish lock at ${lock_dir}" >&2
+      rm -rf "${stage_tmp}"
+      return 1
+    fi
+    sleep 0.05
+  done
+  # Critical section: remove old staging dir then atomically rename tmp into place.
   rm -rf "${STAGE_DIR}"
   mv "${stage_tmp}" "${STAGE_DIR}"
+  # Release lock.
+  rm -rf "${lock_dir}"
 }
 
 do_diff() {
