@@ -21,6 +21,9 @@ type HarnessManifest struct {
 	Backend string
 	// Skills is the ordered list of skill refs declared in the manifest.
 	Skills []string
+	// CommandArgs is the ordered list of extra CLI arguments appended to the
+	// harness invocation. Used to pass --betas flags for extended context.
+	CommandArgs []string
 }
 
 // loadHarnessManifest parses a scion-agent.yaml body into a typed HarnessManifest.
@@ -43,7 +46,8 @@ func loadHarnessManifest(body []byte) (HarnessManifest, error) {
 	if skills == nil {
 		skills = []string{}
 	}
-	return HarnessManifest{Backend: backend, Skills: skills}, nil
+	cmdArgs := scanList(s, "command_args:")
+	return HarnessManifest{Backend: backend, Skills: skills, CommandArgs: cmdArgs}, nil
 }
 
 // harnessSecretFor returns the hub secret name required by a given backend.
