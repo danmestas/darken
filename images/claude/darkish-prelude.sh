@@ -191,23 +191,36 @@ if command -v jq >/dev/null 2>&1; then
   else
     EXISTING_SETTINGS='{}'
   fi
+  # Idempotent: append each hook entry only when no existing entry for this
+  # command is already present. De-duplicates by command path so persistent
+  # container homes do not accumulate duplicate operator messages across runs.
   echo "${EXISTING_SETTINGS}" | jq --arg cmd "${DARKEN_HOOK_SCRIPT}" '
     .hooks = (.hooks // {}) |
     .hooks.Stop = (
-      (.hooks.Stop // []) + [{
+      (.hooks.Stop // []) as $existing |
+      if any($existing[]; .hooks[]?.command == $cmd) | not
+      then $existing + [{
         "hooks": [{"type": "command", "command": $cmd,
                    "env": {"DARKISH_HOOK_EVENT": "Stop"}}]
       }]
+      else $existing
+      end
     ) |
     .hooks.PreToolUse = (
-      (.hooks.PreToolUse // []) + [{
+      (.hooks.PreToolUse // []) as $existing |
+      if any($existing[];
+             .matcher == "AskFollowupQuestion" and
+             (.hooks[]?.command == $cmd)) | not
+      then $existing + [{
         "matcher": "AskFollowupQuestion",
         "hooks": [{"type": "command", "command": $cmd,
                    "env": {"DARKISH_HOOK_EVENT": "AskFollowupQuestion"}}]
       }]
+      else $existing
+      end
     )
   ' > "${DARKEN_SETTINGS}.tmp" && mv "${DARKEN_SETTINGS}.tmp" "${DARKEN_SETTINGS}"
-  echo "darkish-prelude: operator notification hooks written to ${DARKEN_SETTINGS}" >&2
+  echo "darkish-prelude: operator notification hooks merged into ${DARKEN_SETTINGS}" >&2
 else
   echo "darkish-prelude: WARNING -- jq not found, operator notification hooks not configured" >&2
 fi
