@@ -30,6 +30,7 @@ var subcommands = []subcommand{
 	{"creds", "refresh hub secrets", runCreds},
 	{"images", "wrap make -C images", runImages},
 	{"list", "wrap scion list", runList},
+	{"look", "inspect an agent terminal, ANSI-stripped (wraps scion look)", runLook},
 	{"orchestrate", "print host-mode orchestrator skill body", runOrchestrate},
 	{"redispatch", "kill + re-spawn an agent with the same role", runRedispatch},
 	{"init", "scaffold CLAUDE.md in a target dir", runInit},
