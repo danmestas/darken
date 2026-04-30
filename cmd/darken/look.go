@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"regexp"
 )
 
@@ -26,35 +25,21 @@ func runLook(args []string) error {
 	return runLookInto(args, os.Stdout)
 }
 
-// runLookInto runs `scion --no-hub look <agent>`, strips ANSI escape
-// sequences from the output, and writes clean text to w.
+// runLookInto fetches the raw terminal output for the named agent via
+// ScionClient.LookAgent, strips ANSI escape sequences, and writes clean
+// text to w. Routing through ScionClient ensures env propagation is
+// consistent with all other scion operations and avoids hardcoding flags
+// such as --no-hub.
 func runLookInto(args []string, w io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: darken look <agent>")
 	}
 	agentName := args[0]
-	cmdArgs := append([]string{"--no-hub", "look", agentName}, args[1:]...)
-	cmd := exec.Command("scion", cmdArgs...)
-	raw, err := cmd.Output()
+	raw, err := defaultScionClient.LookAgent(agentName, args[1:])
 	if err != nil {
-		// Surface stderr if available.
-		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
-			return fmt.Errorf("scion look %s: %w\n%s", agentName, err, ee.Stderr)
-		}
-		return fmt.Errorf("scion look %s: %w", agentName, err)
+		return err
 	}
 	clean := stripANSI(raw)
 	_, werr := w.Write(clean)
 	return werr
-}
-
-// init registers the look subcommand so it appears in `darken --help`.
-// This is called from the package init chain; the subcommands slice is
-// defined in main.go and is safe to append during init.
-func init() {
-	subcommands = append(subcommands, subcommand{
-		name: "look",
-		desc: "inspect an agent terminal, ANSI-stripped (wraps scion look)",
-		run:  runLook,
-	})
 }

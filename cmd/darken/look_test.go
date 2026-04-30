@@ -99,3 +99,45 @@ func TestRunLook_RequiresAgentArg(t *testing.T) {
 		t.Errorf("error should mention agent argument, got: %v", err)
 	}
 }
+
+// TestRunLook_UsesScionClient asserts that runLookInto routes through
+// ScionClient.LookAgent rather than calling exec.Command("scion") directly.
+func TestRunLook_UsesScionClient(t *testing.T) {
+	mc := &mockScionClient{
+		lookAgentOut: []byte("worker-1 phase: running\n"),
+	}
+	setDefaultClient(t, mc)
+
+	var buf bytes.Buffer
+	if err := runLookInto([]string{"worker-1"}, &buf); err != nil {
+		t.Fatalf("runLookInto: %v", err)
+	}
+	if len(mc.lookAgentCalls) == 0 {
+		t.Fatal("ScionClient.LookAgent was not called by runLookInto")
+	}
+	if mc.lookAgentCalls[0] != "worker-1" {
+		t.Errorf("LookAgent agent name: got %q, want %q", mc.lookAgentCalls[0], "worker-1")
+	}
+	if got := buf.String(); got != "worker-1 phase: running\n" {
+		t.Errorf("unexpected output: %q", got)
+	}
+}
+
+// TestRunLook_NoHubFlagAbsent asserts that scion is not called with --no-hub.
+// With ScionClient routing, scionCmdWithEnv builds the command without
+// hardcoded flags; this test confirms --no-hub is absent from the scion call.
+func TestRunLook_NoHubFlagAbsent(t *testing.T) {
+	stubDir := t.TempDir()
+	logPath := filepath.Join(stubDir, "args.log")
+	// This stub rejects any invocation that includes --no-hub.
+	script := "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = \"--no-hub\" ]; then\n    echo \"REJECTED: --no-hub found\" >&2\n    exit 1\n  fi\ndone\necho \"output\" >> " + logPath + "\nprintf 'ok'\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	var buf bytes.Buffer
+	if err := runLookInto([]string{"agent-1"}, &buf); err != nil {
+		t.Fatalf("runLookInto: --no-hub appears to be hardcoded: %v", err)
+	}
+}
