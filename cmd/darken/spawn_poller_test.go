@@ -116,6 +116,51 @@ func TestPollUntilReady_ScionListErrors(t *testing.T) {
 	}
 }
 
+// TestJsonStart_WhitespacePrefixedLine asserts F-11: jsonStart must recognise
+// a JSON array or object that is preceded by leading spaces or tabs on the
+// first meaningful line, returning from the '[' / '{' byte rather than from
+// the start of the line.
+func TestJsonStart_WhitespacePrefixedLine(t *testing.T) {
+	cases := []struct {
+		name  string
+		input []byte
+		// wantByte is the first byte of the slice jsonStart should return.
+		wantByte byte
+	}{
+		{
+			name:     "leading spaces before array",
+			input:    []byte("  \t []\n"),
+			wantByte: '[',
+		},
+		{
+			name:     "leading tabs before object",
+			input:    []byte("\t\t{}\n"),
+			wantByte: '{',
+		},
+		{
+			name:     "warning line then indented array",
+			input:    []byte("WARNING: dev-auth mode\n  [{\"name\":\"a\"}]\n"),
+			wantByte: '[',
+		},
+		{
+			name:     "no whitespace prefix still works",
+			input:    []byte("[{\"name\":\"a\"}]\n"),
+			wantByte: '[',
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := jsonStart(tc.input)
+			if len(got) == 0 {
+				t.Fatalf("jsonStart returned empty slice for input %q", tc.input)
+			}
+			if got[0] != tc.wantByte {
+				t.Fatalf("jsonStart(%q)[0] = %q, want %q", tc.input, got[0], tc.wantByte)
+			}
+		})
+	}
+}
+
 func TestPollUntilReady_CallbackFiresOnPhaseChange(t *testing.T) {
 	// First call: phase=starting. Second call: phase=running.
 	// Use a script that flips state via a sentinel file.

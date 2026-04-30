@@ -38,20 +38,25 @@ func runSpawn(args []string) error {
 		}
 	}
 
-	// Load command_args from the manifest (non-fatal: missing or unreadable
-	// manifests degrade gracefully — operator still gets the agent started).
-	var extraArgs []string
-	if m, err := loadManifestForRole(*harnessType); err == nil {
-		extraArgs = m.CommandArgs
+	// Validate the manifest before attempting to start the agent. A parse
+	// error in a known role's manifest is a configuration mistake that must
+	// be fixed; silently degrading would let a broken manifest produce an
+	// agent with missing context or wrong backend.
+	// A missing manifest (ErrNotExist) is non-fatal: the role may not have a
+	// local template tree in this workspace.
+	if _, err := loadManifestForRole(*harnessType); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("spawn: manifest for role %q: %w", *harnessType, err)
 	}
+	// TODO(upstream-scion): manifest command_args are intentionally not
+	// forwarded to scion start. scion start has no --betas flag; passing raw
+	// harness flags through the orchestration CLI crosses an abstraction
+	// boundary. Wire m.CommandArgs here once upstream scion exposes a
+	// harness-level flag routing mechanism.
 
 	startArgs := []string{"--type", *harnessType}
 	if *backend != "" {
 		image := fmt.Sprintf("local/darkish-%s:latest", *backend)
 		startArgs = append(startArgs, "--harness", *backend, "--image", image)
-	}
-	if len(extraArgs) > 0 {
-		startArgs = append(startArgs, extraArgs...)
 	}
 	if len(posArgs) > 0 {
 		startArgs = append(startArgs, posArgs...)

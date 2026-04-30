@@ -82,14 +82,22 @@ func scionListAgents() ([]agentInfo, error) {
 	return agents, nil
 }
 
-// jsonStart returns the first line of b that starts with '[' or '{',
-// plus all subsequent bytes. Lines before that are silently discarded.
+// jsonStart returns the slice of b starting at the first '[' or '{'
+// that appears as the first non-whitespace byte of a line.
+// Lines before that are silently discarded. Leading spaces and tabs on
+// the matching line are also stripped so the caller receives a slice
+// that begins with the JSON delimiter itself.
 // If no such line exists, the original slice is returned unchanged so
 // that the caller surfaces a descriptive json.Unmarshal error.
 func jsonStart(b []byte) []byte {
 	for len(b) > 0 {
-		if b[0] == '[' || b[0] == '{' {
-			return b
+		// Find the first non-space/tab byte on this line.
+		i := 0
+		for i < len(b) && (b[i] == ' ' || b[i] == '\t') {
+			i++
+		}
+		if i < len(b) && (b[i] == '[' || b[i] == '{') {
+			return b[i:]
 		}
 		nl := bytes.IndexByte(b, '\n')
 		if nl < 0 {
