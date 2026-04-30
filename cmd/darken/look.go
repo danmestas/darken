@@ -7,11 +7,19 @@ import (
 	"regexp"
 )
 
-// ansiEscape matches ANSI/VT100 escape sequences of the form ESC[...m
-// as well as cursor-control sequences (ESC[<n>J, ESC[H, etc.).
-// The pattern covers the common CSI (Control Sequence Introducer)
-// family used by terminal TUI toolkits.
-var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+// ansiEscape matches ANSI/VT100 escape sequences and strips them from
+// terminal output. Two sequence families are covered:
+//
+//   - CSI (Control Sequence Introducer): ESC [ followed by optional
+//     private-mode prefix '?' (0x3F), digit/semicolon parameters, and a
+//     final letter. Handles standard SGR colours, cursor controls, and
+//     private modes such as ESC[?25l (hide cursor) and ESC[?1049h
+//     (alternate screen).
+//
+//   - OSC (Operating System Command): ESC ] followed by a payload
+//     terminated by BEL (0x07) or ST (ESC \). Handles title-bar updates
+//     such as ESC]0;My Title BEL.
+var ansiEscape = regexp.MustCompile(`\x1b\[[\x3f]?[0-9;]*[A-Za-z]|\x1b\].*?(?:\x07|\x1b\\)`)
 
 // stripANSI removes ANSI escape sequences from b and returns the
 // cleaned bytes. The original slice is not modified.

@@ -46,6 +46,23 @@ func TestStripANSI(t *testing.T) {
 			input: "",
 			want:  "",
 		},
+		// CSI private modes — question-mark parameter prefix used by TUI toolkits.
+		{
+			name:  "CSI hide cursor (ESC[?25l)",
+			input: "\x1b[?25lsome text",
+			want:  "some text",
+		},
+		{
+			name:  "CSI alternate screen enter (ESC[?1049h)",
+			input: "\x1b[?1049hsome text",
+			want:  "some text",
+		},
+		// OSC sequences — title bar updates and other out-of-band messages.
+		{
+			name:  "OSC title BEL terminator (ESC]0;title BEL)",
+			input: "\x1b]0;My Title\x07some text",
+			want:  "some text",
+		},
 	}
 
 	for _, tc := range cases {
