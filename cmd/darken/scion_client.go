@@ -11,7 +11,7 @@ import (
 // scion CLI. Env propagation, output policy, and error mapping are owned by
 // the implementation; callers receive typed results.
 //
-// The five methods correspond to the five operation classes used across
+// The six methods correspond to the six operation classes used across
 // doctor.go, spawn.go, setup.go, and bootstrap.go.
 type ScionClient interface {
 	// ServerStatus returns the raw output of `scion server status`.
@@ -33,10 +33,15 @@ type ScionClient interface {
 	// PushTemplate uploads a role template to the hub at user (global) scope.
 	PushTemplate(role string) error
 
-	// GroveInit registers the current directory as a project-scoped scion grove.
+	// GroveInit registers targetDir as a project-scoped scion grove.
 	// Idempotent at the caller level: callers check for .scion/grove-id before
-	// invoking this method.
-	GroveInit() error
+	// invoking this method. targetDir is used as the working directory so that
+	// grove init applies to the correct project even when cwd differs.
+	GroveInit(targetDir string) error
+
+	// LookAgent returns the raw terminal output of `scion look <name>`.
+	// ANSI stripping is the caller's responsibility.
+	LookAgent(name string, extraArgs []string) ([]byte, error)
 }
 
 // execScionClient is the production ScionClient that delegates to the scion binary.
@@ -82,11 +87,24 @@ func (c *execScionClient) PushTemplate(role string) error {
 	return cmd.Run()
 }
 
-func (c *execScionClient) GroveInit() error {
+func (c *execScionClient) GroveInit(targetDir string) error {
 	cmd := scionCmdWithEnv([]string{"grove", "init"})
+	cmd.Dir = targetDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func (c *execScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {
+	full := append([]string{"look", name}, extraArgs...)
+	out, err := scionCmdWithEnv(full).Output()
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
+			return out, fmt.Errorf("scion look %s: %w\n%s", name, err, ee.Stderr)
+		}
+		return out, fmt.Errorf("scion look %s: %w", name, err)
+	}
+	return out, nil
 }
 
 // defaultScionClient is the package-level ScionClient used by doctor, spawn,
