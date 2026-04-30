@@ -27,6 +27,31 @@ func stubScionList(t *testing.T, jsonBody string) {
 	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
 }
 
+// TestScionListAgents_StripsWarningPrefix asserts Bug 19: scion sometimes
+// prepends a dev-auth WARNING line before the JSON array. scionListAgents
+// must strip any non-JSON prefix lines so json.Unmarshal succeeds.
+func TestScionListAgents_StripsWarningPrefix(t *testing.T) {
+	stubDir := t.TempDir()
+	// Stub output: WARNING line then valid JSON array.
+	stubOutput := "WARNING: dev-auth mode; hub token unset\n" +
+		`[{"name":"worker-1","phase":"running","template":"researcher"}]`
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' '" + stubOutput + "'\n" +
+		"exit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	agents, err := scionListAgents()
+	if err != nil {
+		t.Fatalf("expected success stripping WARNING prefix, got: %v", err)
+	}
+	if len(agents) != 1 || agents[0].Name != "worker-1" {
+		t.Fatalf("expected [{worker-1 running researcher}], got %+v", agents)
+	}
+}
+
 func TestPollUntilReady_ReturnsWhenRunning(t *testing.T) {
 	stubScionList(t, `[{"name":"researcher-1","phase":"running"}]`)
 

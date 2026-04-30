@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -64,14 +65,37 @@ func pollUntilReady(agentName string, timeout, interval time.Duration, onPhaseCh
 
 // scionListAgents shells out to `scion list --format json` and parses
 // the result into agentInfo slices.
+//
+// scion sometimes prepends non-JSON diagnostic lines (e.g. a dev-auth
+// WARNING) before the JSON array. jsonStart strips those lines so the
+// unmarshal does not fail on the prefix.
 func scionListAgents() ([]agentInfo, error) {
 	out, err := exec.Command("scion", "list", "--format", "json").Output()
 	if err != nil {
 		return nil, err
 	}
+	jsonBytes := jsonStart(out)
 	var agents []agentInfo
-	if err := json.Unmarshal(out, &agents); err != nil {
+	if err := json.Unmarshal(jsonBytes, &agents); err != nil {
 		return nil, fmt.Errorf("parse scion list output: %w", err)
 	}
 	return agents, nil
+}
+
+// jsonStart returns the first line of b that starts with '[' or '{',
+// plus all subsequent bytes. Lines before that are silently discarded.
+// If no such line exists, the original slice is returned unchanged so
+// that the caller surfaces a descriptive json.Unmarshal error.
+func jsonStart(b []byte) []byte {
+	for len(b) > 0 {
+		if b[0] == '[' || b[0] == '{' {
+			return b
+		}
+		nl := bytes.IndexByte(b, '\n')
+		if nl < 0 {
+			return b
+		}
+		b = b[nl+1:]
+	}
+	return b
 }
