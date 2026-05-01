@@ -33,6 +33,13 @@ type ScionClient interface {
 	// PushTemplate uploads a role template to the hub at user (global) scope.
 	PushTemplate(role string) error
 
+	// ImportAllTemplates copies every template subdirectory under dir into
+	// scion's local store at user (global) scope. Idempotent: re-importing
+	// the same template overwrites the prior copy. Bodies survive deletion
+	// of the source dir, so the caller can clean up an extracted tmpdir
+	// immediately after this returns.
+	ImportAllTemplates(dir string) error
+
 	// GroveInit registers targetDir as a project-scoped scion grove.
 	// Idempotent at the caller level: callers check for .scion/grove-id before
 	// invoking this method. targetDir is used as the working directory so that
@@ -82,6 +89,13 @@ func (c *execScionClient) BrokerProvide() error {
 
 func (c *execScionClient) PushTemplate(role string) error {
 	cmd := scionCmdWithEnv([]string{"--global", "templates", "push", role})
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (c *execScionClient) ImportAllTemplates(dir string) error {
+	cmd := scionCmdWithEnv([]string{"--global", "templates", "import", "--all", dir})
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
