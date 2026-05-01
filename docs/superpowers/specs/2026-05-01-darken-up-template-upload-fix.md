@@ -43,13 +43,77 @@ In darkish-factory, `.scion/templates/<role>/` exists in the repo root, `resolve
 - Partial-progress retry. Current fail-fast on first push error stays. Recovery stays "re-run `darken up`".
 - The existing dual-source resolver (`repoRoot()/.scion/templates/` vs. embedded fallback). The fix preserves that precedence.
 
-## Design
+## Verification step 0 — scion CLI semantics
 
-### Tmpdir ownership moves up to `runUp`
+The right design depends on a fact about scion that the spec cannot assume. Before writing any code, the implementer establishes the scion CLI surface by running:
 
-`runUp` (cmd/darken/up.go:45) becomes the single owner of the resolved templates dir. Both bootstrap stage-skills and upload-templates borrow the path.
+```bash
+scion templates push --help
+scion templates create --help
+scion templates list --help     # for the test assertion
+```
+
+Two questions to answer:
+
+**Q-A. Does `scion templates create <role> <path>` intern (copy) the template body into scion's own store?** Run a one-line probe:
+
+```bash
+tmp=$(mktemp -d); cp -r .scion/templates/admin "$tmp/admin"; \
+  scion --global templates create admin "$tmp/admin"; \
+  rm -rf "$tmp"; \
+  scion --global templates list | grep admin
+```
+
+If `admin` still appears after `rm -rf`, scion interns the body. If `templates list` errors or `admin` is gone, scion stored a path reference and the dir must outlive every later operation.
+
+**Q-B. Does `scion templates push <role>` accept a `--from <path>` flag** that lets the caller pass the dir at push time? Read `--help` output; presence/absence is a binary fact.
+
+The implementer records both answers in the PR description before writing code. The design branch follows.
+
+## Design — two conditional branches
+
+The two branches are scored against Ousterhout principles. Pick whichever the verification step rules in.
+
+### Branch A — register-at-extract (preferred)
+
+Applies when **Q-A is yes** (`create` interns the body).
+
+Single change site: `ensureAllSkillsStaged` (bootstrap.go:83-105) gains one extra step inside its existing extract→stage→cleanup window. After staging, before cleanup, call `scion --global templates create <role> <dir>/<role>` for each role. Scion now has the bodies internalized in its own template store. The deferred cleanup runs and removes the tmpdir. The `uploadAllTemplatesToHub` step (setup.go:50-58) then runs unchanged — `scion --global templates push <role>` succeeds because scion already has the body.
 
 Pseudocode:
+
+```go
+func ensureAllSkillsStaged(...) error {
+    dir, cleanup, err := resolveTemplatesDir()
+    if err != nil { return err }
+    defer cleanup()
+
+    if err := stageSkillsFrom(dir); err != nil { return err }
+
+    for _, role := range canonicalRoles {
+        if err := defaultScionClient.CreateTemplate(role, filepath.Join(dir, role)); err != nil {
+            return fmt.Errorf("create template %s: %w", role, err)
+        }
+    }
+    return nil
+}
+```
+
+Files changed: bootstrap.go (one new loop), scion_client.go (new `CreateTemplate(role, dir)` method), scion_client_test.go (mock gains the new method).
+
+`uploadAllTemplatesToHub`, `PushTemplate`, `runUp`, `up.go`, `setup.go`: untouched.
+
+**Why this is the deeper module.**
+
+- `runUp` doesn't learn about templates resolution. The `runBootstrap()` post-condition becomes "scion has all 14 canonical templates registered locally." That precondition is what `uploadAllTemplatesToHub` already implicitly assumes.
+- The error class "tmpdir gone before push" is defined out of existence — push never reads the tmpdir.
+- One file changed, one new method. No signature breakage on `PushTemplate`.
+
+### Branch B — tmpdir-lifetime-spans-up-flow (fallback)
+
+Applies when **Q-A is no** (scion `create` is reference-only) **AND** Q-B answers either yes or no — both push variants need the dir alive for the same reason.
+
+`runUp` (cmd/darken/up.go:45) becomes the single owner of the resolved templates dir. Both bootstrap stage-skills and upload-templates borrow the path.
 
 ```go
 func runUp(...) error {
@@ -63,69 +127,80 @@ func runUp(...) error {
 }
 ```
 
-### Function signature changes
-
 | File | Function | Before | After |
 |---|---|---|---|
 | cmd/darken/bootstrap.go:83 | `ensureAllSkillsStaged` | resolves internally | takes `dir string` |
-| cmd/darken/bootstrap.go:129 | `resolveTemplatesDir` | unchanged (still callable from `runUp`) | unchanged |
-| cmd/darken/setup.go:50 | `uploadAllTemplatesToHub` | iterates roles, calls `client.PushTemplate(role)` | takes `dir string`, calls `client.PushTemplate(role, dir)` |
-| cmd/darken/scion_client.go:83 | `ScionClient.PushTemplate` | `PushTemplate(role string)` | `PushTemplate(role, dir string)` |
-| cmd/darken/scion_client.go:84 | exec form | `scion --global templates push <role>` | `scion --global templates push <role> --from <dir>/<role>` (preferred) OR two-step (fallback) |
+| cmd/darken/setup.go:50 | `uploadAllTemplatesToHub` | iterates roles, `client.PushTemplate(role)` | takes `dir string`, calls `client.PushTemplate(role, dir)` |
+| cmd/darken/scion_client.go:83 | `PushTemplate` | `PushTemplate(role)` | `PushTemplate(role, dir)` |
+| cmd/darken/scion_client.go:84 | exec form | `scion --global templates push <role>` | `scion --global templates push <role> --from <dir>/<role>` (Q-B yes) OR two-step `create <role> <dir>/<role>` then `push <role>` (Q-B no) |
 
-### Verification gap (implementation step 0)
+Branch B accepts the cost of widening `PushTemplate`'s interface and wiring the dir through three layers because no other path is available given Q-A no.
 
-Before coding, verify what `scion templates push` accepts:
+### Decision rule
 
-```bash
-scion templates push --help
+```
+Q-A yes → Branch A.
+Q-A no  → Branch B (with Q-B picking one-step vs two-step exec form).
 ```
 
-- If `--from <path>` is supported: one-step form.
-- If not: two-step — `scion templates create <role> <dir>/<role>` followed by `scion templates push <role>`. The `create` step makes scion aware of the local template; the subsequent `push` ships it to the Hub.
+The implementer picks the branch in the PR after running step 0, and the rest of the implementation follows.
 
-The spec records this as a verification gap, not a guess. The implementer reports back which form scion supports and the test/code follow that path.
+## Error handling
 
-### Error handling
-
-Existing fail-fast preserved (setup.go:53-55). On any push error:
+Existing fail-fast preserved. On any error from `CreateTemplate` (Branch A) or `PushTemplate` (Branch B), `runBootstrap` or `uploadAllTemplatesToHub` returns the wrapped error. The deferred cleanup runs. The operator's recovery is `darken up` again.
 
 ```go
+return fmt.Errorf("create template %s: %w", role, err)
+// or
 return fmt.Errorf("upload template %s: %w", role, err)
 ```
 
-This bubbles to `runUp`, which returns. The deferred cleanup runs. The operator's recovery is `darken up` again. No partial-progress state to manage.
+No partial-progress retry. Out of scope.
 
 ## Test strategy
 
-PATH-stub scion. The pattern at setup_test.go:194 already substitutes a fake `scion` binary on `PATH` that logs invocations. Extend it:
+The test asserts the **observable outcome**, not the implementation invariant. This makes the test correct regardless of which branch ships.
 
-1. **Stub records dir-state at invocation time.** When the stub is called for `templates push <role> [--from <dir>]` (or the two-step form), it asserts the source directory exists on the filesystem AND contains the role's `template.yaml`. Records pass/fail per call.
+### Primary test — observable outcome
 
-2. **New test: `TestRunUp_TemplateDirSurvivesUntilPush`** in cmd/darken/up_test.go. Setup:
-   - Fresh tmpdir as the consuming project (no `.scion/templates/`).
-   - PATH-stub scion as above.
-   - Run `runUp(...)` end-to-end (excluding actual Docker/Hub calls — those are separately mocked or stubbed).
-   - Assert: every one of the 14 canonical roles produced a successful push call (stub recorded a live source dir).
+`TestRunUp_AllTemplatesRegisteredAfterUp` in cmd/darken/up_test.go.
 
-3. **Failing-state coverage.** The new test fails on `main` today (push happens after cleanup). Verifies the bug. Passes after the fix.
+1. Fresh tmpdir as the consuming project (no `.scion/templates/`).
+2. PATH-stub scion that records every invocation AND maintains an in-memory map of registered roles. The stub mimics scion's own behavior: `templates create <role> <path>` records the role in the map; `templates push <role>` requires the role be in the map (returns "not found locally" otherwise — the exact production error); `templates list` returns the map keys.
+3. Run `runUp(...)` end-to-end. Docker/Hub calls remain stubbed.
+4. After return, invoke the PATH-stub `scion --global templates list` and assert all 14 canonical roles appear.
 
-4. **Existing coverage stays.** `scion_client_test.go:119` (mocked `PushTemplate` records call count) keeps catching client-API regressions; `setup_test.go:276-303` keeps verifying the `--global templates push <role>` invocation shape.
+This test fails on `main` (no role ever gets registered before push). It passes under either Branch A or Branch B because both end with scion's local store containing the 14 roles. The assertion is design-agnostic.
+
+### Secondary test — branch-specific lifecycle
+
+Once the implementer picks a branch:
+
+- **Branch A:** assert `templates create` was invoked once per role during bootstrap (stub records call sequence).
+- **Branch B:** assert the source dir exists on disk at the moment every `templates push <role>` (or the two-step form) is recorded by the stub.
+
+Both are invariant tests guarding against regressions in the chosen design.
+
+### Existing tests
+
+`scion_client_test.go:119` (mocked `PushTemplate` call-count) keeps catching client-API regressions. Under Branch A it stays as-is; under Branch B the mock signature updates to match.
+
+`setup_test.go:276-303` (verifies the `--global templates push <role>` invocation shape) keeps catching invocation-shape regressions.
 
 ## Backward-compatibility
 
-- **darkish-factory.** `.scion/templates/<role>/` exists at repo root. `resolveTemplatesDir` returns repo-root path with a no-op cleanup. No extraction. Behavior identical to today.
-- **All other projects.** One extraction per `darken up` (was: zero successful uploads). Net win.
-- **Public function signatures.** `ScionClient.PushTemplate` gains a parameter — breaking change for any external caller. There are none in the repo. Mock at scion_client_test.go:43 must update to match. No external Go-import surface to consider.
+- **darkish-factory.** `.scion/templates/<role>/` exists at repo root. `resolveTemplatesDir` returns repo-root path with a no-op cleanup. No extraction. No behavior change under either branch.
+- **All other projects.** Branch A: 14 extra `templates create` execs during bootstrap; templates registered. Branch B: the dir survives until push (one-step) or until create+push (two-step). Either way: zero successful uploads → fourteen.
+- **Public function signatures.** Branch A: `ScionClient` gains a method (`CreateTemplate`); no existing method changes. Branch B: `ScionClient.PushTemplate` gains a parameter — breaking change for any external caller. There are none in the repo. No external Go-import surface in either case.
 
 ## Migration
 
-Single PR. No staged rollout needed. The fix is internal to `cmd/darken` and the test stub.
+Single PR. No staged rollout. The fix is internal to `cmd/darken` and the test stub.
 
 ## Open questions for operator
 
-1. **Branch / PR shape.** Single PR for fix + test, or split (test-first as a failing test on its own commit, then fix as a second commit on the same PR)? Spec defaults to single PR with both commits.
-2. **Verification gap escalation.** If `scion templates push --from` is NOT supported, the two-step form adds a second exec per role (28 exec calls instead of 14). Acceptable, or worth a scion-side feature request to add `--from`? Spec defaults to "use two-step, file scion issue separately."
+1. **Branch / PR shape.** Single PR for verification + fix + test, or split (verification commit reporting Q-A/Q-B, then design-branch commit, then test commit)? Spec defaults to single PR; PR description records the verification answers and selected branch.
+2. **If Branch B with Q-B no (two-step).** The fallback path adds 14 extra exec calls (`templates create` per role). Acceptable, or worth a scion-side feature request for `templates push --from`? Spec defaults to "ship two-step, file scion issue separately."
 
 ## File-paths cited
 
