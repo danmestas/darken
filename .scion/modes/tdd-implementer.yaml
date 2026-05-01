@@ -1,0 +1,4 @@
+description: "Default skills for the tdd-implementer harness."
+skills:
+  - idiomatic-go
+  - tigerstyle

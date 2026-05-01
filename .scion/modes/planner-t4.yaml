@@ -1,0 +1,4 @@
+description: "Default skills for the planner-t4 harness."
+extends: philosophy-base
+skills:
+  - spec-kit
