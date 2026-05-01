@@ -55,18 +55,22 @@ scion templates list --help     # for the test assertion
 
 Two questions to answer:
 
-**Q-A. Does `scion templates create <role> <path>` intern (copy) the template body into scion's own store?** Run a one-line probe:
+**Q-A. Does scion offer a command to copy a template body from a path into its own local store?**
+
+Verified 2026-05-01: **yes**, via `scion --global templates import <path>` (single) or `scion --global templates import --all <dir>` (batch from a directory of templates). The body is copied to `~/.scion/templates/<role>` and survives source-dir deletion. Probe used:
 
 ```bash
-tmp=$(mktemp -d); cp -r .scion/templates/admin "$tmp/admin"; \
-  scion --global templates create admin "$tmp/admin"; \
-  rm -rf "$tmp"; \
-  scion --global templates list | grep admin
+tmp=$(mktemp -d); cp -r .scion/templates/admin "$tmp/admin"
+scion --global templates import "$tmp/admin"
+rm -rf "$tmp"
+scion --global templates list | grep admin   # admin still appears; body at ~/.scion/templates/admin
 ```
 
-If `admin` still appears after `rm -rf`, scion interns the body. If `templates list` errors or `admin` is gone, scion stored a path reference and the dir must outlive every later operation.
+(Note: `templates create` — referenced earlier as a guess — actually creates an empty template, not what we want. `import` is the correct command.)
 
-**Q-B. Does `scion templates push <role>` accept a `--from <path>` flag** that lets the caller pass the dir at push time? Read `--help` output; presence/absence is a binary fact.
+**Q-B. Does `scion templates push <role>` accept a `--from <path>` flag?**
+
+Verified 2026-05-01: **no**. `templates push` accepts only `--all` and `--name`. It looks up the template by name in scion's own local store; the caller cannot pass a path at push time.
 
 The implementer records both answers in the PR description before writing code. The design branch follows.
 
@@ -74,11 +78,11 @@ The implementer records both answers in the PR description before writing code. 
 
 The two branches are scored against Ousterhout principles. Pick whichever the verification step rules in.
 
-### Branch A — register-at-extract (preferred)
+### Branch A — register-at-extract (verification-confirmed)
 
-Applies when **Q-A is yes** (`create` interns the body).
+Verification ruled in this branch (Q-A yes, Q-B no).
 
-Single change site: `ensureAllSkillsStaged` (bootstrap.go:83-105) gains one extra step inside its existing extract→stage→cleanup window. After staging, before cleanup, call `scion --global templates create <role> <dir>/<role>` for each role. Scion now has the bodies internalized in its own template store. The deferred cleanup runs and removes the tmpdir. The `uploadAllTemplatesToHub` step (setup.go:50-58) then runs unchanged — `scion --global templates push <role>` succeeds because scion already has the body.
+Single change site: `ensureAllSkillsStaged` (bootstrap.go:83-105) gains one extra step inside its existing extract→stage→cleanup window. After staging, before cleanup, call `scion --global templates import --all <dir>` once. Scion copies all 14 canonical role bodies into its own template store at `~/.scion/templates/<role>`. The deferred cleanup runs and removes the tmpdir. The `uploadAllTemplatesToHub` step (setup.go:50-58) then runs unchanged — `scion --global templates push <role>` succeeds because scion has the bodies.
 
 Pseudocode:
 
@@ -90,16 +94,14 @@ func ensureAllSkillsStaged(...) error {
 
     if err := stageSkillsFrom(dir); err != nil { return err }
 
-    for _, role := range canonicalRoles {
-        if err := defaultScionClient.CreateTemplate(role, filepath.Join(dir, role)); err != nil {
-            return fmt.Errorf("create template %s: %w", role, err)
-        }
+    if err := defaultScionClient.ImportAllTemplates(dir); err != nil {
+        return fmt.Errorf("import templates: %w", err)
     }
     return nil
 }
 ```
 
-Files changed: bootstrap.go (one new loop), scion_client.go (new `CreateTemplate(role, dir)` method), scion_client_test.go (mock gains the new method).
+Files changed: bootstrap.go (one new call), scion_client.go (new `ImportAllTemplates(dir)` method), scion_client_test.go (mock gains the new method).
 
 `uploadAllTemplatesToHub`, `PushTemplate`, `runUp`, `up.go`, `setup.go`: untouched.
 
@@ -151,10 +153,10 @@ The implementer picks the branch in the PR after running step 0, and the rest of
 
 ## Error handling
 
-Existing fail-fast preserved. On any error from `CreateTemplate` (Branch A) or `PushTemplate` (Branch B), `runBootstrap` or `uploadAllTemplatesToHub` returns the wrapped error. The deferred cleanup runs. The operator's recovery is `darken up` again.
+Existing fail-fast preserved. On any error from `ImportAllTemplates` (Branch A) or `PushTemplate` (Branch B), `runBootstrap` or `uploadAllTemplatesToHub` returns the wrapped error. The deferred cleanup runs. The operator's recovery is `darken up` again.
 
 ```go
-return fmt.Errorf("create template %s: %w", role, err)
+return fmt.Errorf("import templates: %w", err)
 // or
 return fmt.Errorf("upload template %s: %w", role, err)
 ```
@@ -170,7 +172,7 @@ The test asserts the **observable outcome**, not the implementation invariant. T
 `TestRunUp_AllTemplatesRegisteredAfterUp` in cmd/darken/up_test.go.
 
 1. Fresh tmpdir as the consuming project (no `.scion/templates/`).
-2. PATH-stub scion that records every invocation AND maintains an in-memory map of registered roles. The stub mimics scion's own behavior: `templates create <role> <path>` records the role in the map; `templates push <role>` requires the role be in the map (returns "not found locally" otherwise — the exact production error); `templates list` returns the map keys.
+2. PATH-stub scion that records every invocation AND maintains an in-memory map of registered roles. The stub mimics scion's own behavior: `templates import <path>` and `templates import --all <dir>` register the role(s) in the map; `templates push <role>` requires the role be in the map (returns "not found locally" otherwise — the exact production error); `templates list` returns the map keys.
 3. Run `runUp(...)` end-to-end. Docker/Hub calls remain stubbed.
 4. After return, invoke the PATH-stub `scion --global templates list` and assert all 14 canonical roles appear.
 
@@ -180,7 +182,7 @@ This test fails on `main` (no role ever gets registered before push). It passes 
 
 Once the implementer picks a branch:
 
-- **Branch A:** assert `templates create` was invoked once per role during bootstrap (stub records call sequence).
+- **Branch A:** assert `templates import --all <dir>` was invoked exactly once during bootstrap, with `<dir>` containing all 14 canonical role subdirectories at call time (stub records call sequence and inspects argument).
 - **Branch B:** assert the source dir exists on disk at the moment every `templates push <role>` (or the two-step form) is recorded by the stub.
 
 Both are invariant tests guarding against regressions in the chosen design.
@@ -194,8 +196,8 @@ Both are invariant tests guarding against regressions in the chosen design.
 ## Backward-compatibility
 
 - **darkish-factory.** `.scion/templates/<role>/` exists at repo root. `resolveTemplatesDir` returns repo-root path with a no-op cleanup. No extraction. No behavior change under either branch.
-- **All other projects.** Branch A: 14 extra `templates create` execs during bootstrap; templates registered. Branch B: client holds the dir; push reads its per-role path internally. Either way: zero successful uploads → fourteen.
-- **Public function signatures.** Branch A: `ScionClient` gains a method (`CreateTemplate`); no existing method changes. Branch B: `ScionClient` gains an optional constructor (`NewScionClient(WithTemplatesDir(...))`) and an internal field; `PushTemplate(role)` signature unchanged. No breaking change to existing callers in either branch.
+- **All other projects.** Branch A: one `templates import --all <dir>` exec during bootstrap; all 14 templates registered to scion's local store. Branch B: client holds the dir; push reads its per-role path internally. Either way: zero successful uploads → fourteen.
+- **Public function signatures.** Branch A: `ScionClient` gains a method (`ImportAllTemplates`); no existing method changes. Branch B: `ScionClient` gains an optional constructor (`NewScionClient(WithTemplatesDir(...))`) and an internal field; `PushTemplate(role)` signature unchanged. No breaking change to existing callers in either branch.
 
 ## Migration
 
@@ -204,7 +206,7 @@ Single PR. No staged rollout. The fix is internal to `cmd/darken` and the test s
 ## Open questions for operator
 
 1. **Branch / PR shape.** Single PR for verification + fix + test, or split (verification commit reporting Q-A/Q-B, then design-branch commit, then test commit)? Spec defaults to single PR; PR description records the verification answers and selected branch.
-2. **If Branch B with Q-B no (two-step).** The fallback path adds 14 extra exec calls (`templates create` per role). Acceptable, or worth a scion-side feature request for `templates push --from`? Spec defaults to "ship two-step, file scion issue separately."
+2. **Verification ruled in Branch A.** Branch B is documented as a fallback for completeness; not pursued by the implementation.
 
 ## File-paths cited
 
