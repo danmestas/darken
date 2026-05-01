@@ -8,5 +8,6 @@ model: claude-sonnet-4-6
 max_turns: 30
 max_duration: "1h"
 detached: false
+default_mode: researcher
 hub:
   endpoint: ${DARKEN_HUB_ENDPOINT}

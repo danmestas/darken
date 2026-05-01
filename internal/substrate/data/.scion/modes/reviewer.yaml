@@ -1,0 +1,5 @@
+description: "Default skills for the reviewer harness."
+skills:
+  - ousterhout
+  - hipp
+  - dx-audit

@@ -8,8 +8,7 @@ model: gpt-5.5
 max_turns: 50
 max_duration: "2h"
 detached: false
-skills:
-  - danmestas/agent-skills/skills/tigerstyle
+default_mode: verifier
 volumes:
   - source: ./.scion/skills-staging/verifier/
     target: /home/scion/skills/role/
