@@ -149,6 +149,15 @@ func loadManifestForRole(harnessType string) (HarnessManifest, error) {
 // or canonical skills directory cannot be resolved, preserving the
 // pre-REVIEW-7 behavior for operators without a local agent-config tree.
 func stageSkillsForRole(harnessType string) error {
+	// When DARKEN_MODE_OVERRIDE is set (via `darken spawn --mode <name>`),
+	// route through the shell script: it's the only path that resolves
+	// modes (manifest -> default_mode -> .scion/modes/<mode>.yaml with
+	// extends-chain expansion). The Go-path buildSkillsStaging reads
+	// manifest.Skills inline only and would silently drop the override.
+	if os.Getenv("DARKEN_MODE_OVERRIDE") != "" {
+		return stageSkillsViaScript(harnessType)
+	}
+
 	root, rootErr := repoRoot()
 	if rootErr != nil {
 		// No repo root: fall back to shell script.

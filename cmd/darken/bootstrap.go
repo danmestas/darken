@@ -129,6 +129,21 @@ func withSubstrateDirsEnv(templatesDir, modesDir string, fn func() error) error 
 	return fn()
 }
 
+// withModeOverride runs fn with DARKEN_MODE_OVERRIDE set to mode if mode is
+// non-empty; the previous value (or unset state) is restored on return. When
+// mode is empty the env var is left untouched, so callers that don't want to
+// override the role's default_mode pay no cost. Bootstrap doesn't take an
+// override; only spawn does, so this wrapper is intentionally separate from
+// withSubstrateDirsEnv.
+func withModeOverride(mode string, fn func() error) error {
+	if mode == "" {
+		return fn()
+	}
+	restore := setEnvWithRestore("DARKEN_MODE_OVERRIDE", mode)
+	defer restore()
+	return fn()
+}
+
 func setEnvWithRestore(key, val string) func() {
 	prev, hadPrev := os.LookupEnv(key)
 	os.Setenv(key, val)

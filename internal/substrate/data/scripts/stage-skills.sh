@@ -192,8 +192,12 @@ def resolve(name, visited=None, stack=None):
 
 
 try:
-    manifest = load_yaml(manifest_path)
-    mode = manifest.get("default_mode")
+    override = os.environ.get("DARKEN_MODE_OVERRIDE")
+    if override:
+        mode = override
+    else:
+        manifest = load_yaml(manifest_path)
+        mode = manifest.get("default_mode")
     if not mode:
         print(
             f"stage-skills: no default_mode declared for {harness}",

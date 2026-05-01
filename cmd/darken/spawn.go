@@ -18,6 +18,7 @@ func runSpawn(args []string) error {
 	fs := flag.NewFlagSet("spawn", flag.ContinueOnError)
 	harnessType := fs.String("type", "", "harness role (e.g. researcher)")
 	backend := fs.String("backend", "", "backend override (claude|codex|pi|gemini)")
+	mode := fs.String("mode", "", "skill-set mode override (defaults to role's default_mode)")
 	noStage := fs.Bool("no-stage", false, "skip stage-creds and stage-skills")
 	watch := fs.Bool("watch", false, "block + attach to the agent's session (legacy behavior)")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -33,7 +34,9 @@ func runSpawn(args []string) error {
 		if err := runSubstrateScript("scripts/stage-creds.sh", []string{"all"}); err != nil {
 			fmt.Fprintln(os.Stderr, "spawn: stage-creds non-fatal:", err)
 		}
-		if err := stageSkillsForRole(*harnessType); err != nil {
+		if err := withModeOverride(*mode, func() error {
+			return stageSkillsForRole(*harnessType)
+		}); err != nil {
 			return fmt.Errorf("spawn: %w", err)
 		}
 	}

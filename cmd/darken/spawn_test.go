@@ -221,6 +221,51 @@ esac
 	}
 }
 
+// TestWithModeOverride_SetsEnvVar pins that DARKEN_MODE_OVERRIDE is set
+// inside the closure when a non-empty mode name is passed, and is restored
+// (unset, in this test) after the closure returns. This is the mechanism
+// `darken spawn --mode <name>` uses to route an override into the staging
+// pipeline without changing function signatures down the call chain.
+func TestWithModeOverride_SetsEnvVar(t *testing.T) {
+	t.Setenv("DARKEN_MODE_OVERRIDE", "") // start unset
+	os.Unsetenv("DARKEN_MODE_OVERRIDE")
+	called := false
+	err := withModeOverride("custom-mode", func() error {
+		called = true
+		got := os.Getenv("DARKEN_MODE_OVERRIDE")
+		if got != "custom-mode" {
+			t.Errorf("DARKEN_MODE_OVERRIDE = %q; want %q", got, "custom-mode")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("withModeOverride: %v", err)
+	}
+	if !called {
+		t.Fatal("fn was not called")
+	}
+	if got := os.Getenv("DARKEN_MODE_OVERRIDE"); got != "" {
+		t.Errorf("DARKEN_MODE_OVERRIDE leaked after withModeOverride returned: %q", got)
+	}
+}
+
+// TestWithModeOverride_EmptyDoesNotSet confirms the no-override path is a
+// pure pass-through: an empty mode argument leaves the env var untouched
+// so the script falls back to the manifest's default_mode.
+func TestWithModeOverride_EmptyDoesNotSet(t *testing.T) {
+	t.Setenv("DARKEN_MODE_OVERRIDE", "")
+	os.Unsetenv("DARKEN_MODE_OVERRIDE")
+	err := withModeOverride("", func() error {
+		if got := os.Getenv("DARKEN_MODE_OVERRIDE"); got != "" {
+			t.Errorf("DARKEN_MODE_OVERRIDE should not be set for empty override; got %q", got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("withModeOverride: %v", err)
+	}
+}
+
 // TestSpawn_ManifestParseError_IsFatal asserts that runSpawn returns a non-nil
 // error when the manifest for the requested role exists on disk but cannot be
 // parsed (e.g. unknown backend). Silently degrading on parse errors hides
