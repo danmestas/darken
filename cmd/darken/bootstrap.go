@@ -81,13 +81,13 @@ func ensureHubSecrets() error {
 // Soft-fails per-harness so one missing skill canon doesn't abort
 // the whole bootstrap.
 func ensureAllSkillsStaged() error {
-	templatesDir, cleanup, err := resolveTemplatesDir()
+	templatesDir, modesDir, cleanup, err := resolveSubstrateDirs()
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	if err := withTemplatesDirEnv(templatesDir, func() error {
+	if err := withSubstrateDirsEnv(templatesDir, modesDir, func() error {
 		dirs, err := os.ReadDir(templatesDir)
 		if err != nil {
 			return fmt.Errorf("read templates dir %s: %w", templatesDir, err)
@@ -115,61 +115,113 @@ func ensureAllSkillsStaged() error {
 	return nil
 }
 
-// withTemplatesDirEnv runs fn with DARKEN_TEMPLATES_DIR set to dir,
-// restoring the previous value (or unsetting) afterward. Used by
-// callers that need stage-skills.sh to read manifests from a specific
-// path (typically the resolved project-local-or-embedded location).
-func withTemplatesDirEnv(dir string, fn func() error) error {
-	prev, hadPrev := os.LookupEnv("DARKEN_TEMPLATES_DIR")
-	os.Setenv("DARKEN_TEMPLATES_DIR", dir)
-	defer func() {
-		if hadPrev {
-			os.Setenv("DARKEN_TEMPLATES_DIR", prev)
-		} else {
-			os.Unsetenv("DARKEN_TEMPLATES_DIR")
-		}
-	}()
+// withSubstrateDirsEnv runs fn with DARKEN_TEMPLATES_DIR and
+// DARKEN_MODES_DIR set, restoring previous values (or unsetting)
+// afterward. modesDir may be empty when only the templates dir is
+// known; in that case DARKEN_MODES_DIR is left unchanged.
+func withSubstrateDirsEnv(templatesDir, modesDir string, fn func() error) error {
+	restoreT := setEnvWithRestore("DARKEN_TEMPLATES_DIR", templatesDir)
+	defer restoreT()
+	if modesDir != "" {
+		restoreM := setEnvWithRestore("DARKEN_MODES_DIR", modesDir)
+		defer restoreM()
+	}
 	return fn()
 }
 
-// resolveTemplatesDir returns a path containing per-harness manifest
-// dirs (each with scion-agent.yaml). Prefers the operator's project
-// templates if present; otherwise extracts the embedded substrate
-// templates to a tmpdir. The returned cleanup func is a no-op for the
-// project case and an os.RemoveAll for the embedded case.
+func setEnvWithRestore(key, val string) func() {
+	prev, hadPrev := os.LookupEnv(key)
+	os.Setenv(key, val)
+	return func() {
+		if hadPrev {
+			os.Setenv(key, prev)
+		} else {
+			os.Unsetenv(key)
+		}
+	}
+}
+
+// resolveTemplatesDir is the legacy single-dir entry point preserved for
+// callers that don't need the modes dir. Internally delegates to
+// resolveSubstrateDirs and discards the modes path.
 func resolveTemplatesDir() (string, func(), error) {
+	t, _, cleanup, err := resolveSubstrateDirs()
+	return t, cleanup, err
+}
+
+// withTemplatesDirEnv is the legacy env-only-templates wrapper. Prefer
+// withSubstrateDirsEnv when modes are also needed.
+func withTemplatesDirEnv(dir string, fn func() error) error {
+	return withSubstrateDirsEnv(dir, "", fn)
+}
+
+// resolveSubstrateDirs returns paths to the templates and modes dirs.
+// Prefers the operator's project layout (.scion/templates + .scion/modes)
+// if present; otherwise extracts the embedded substrate to a tmpdir
+// laid out as <tmp>/templates/ and <tmp>/modes/. The returned cleanup
+// func is a no-op for the project case and an os.RemoveAll for the
+// embedded case.
+func resolveSubstrateDirs() (string, string, func(), error) {
 	noop := func() {}
 
 	if root, err := repoRoot(); err == nil {
-		projectDir := filepath.Join(root, ".scion", "templates")
-		if info, statErr := os.Stat(projectDir); statErr == nil && info.IsDir() {
-			return projectDir, noop, nil
+		projectTemplates := filepath.Join(root, ".scion", "templates")
+		projectModes := filepath.Join(root, ".scion", "modes")
+		if info, statErr := os.Stat(projectTemplates); statErr == nil && info.IsDir() {
+			// Modes dir may not exist yet on a project mid-migration;
+			// pass through whatever's there and let the script error if
+			// it actually needs it.
+			return projectTemplates, projectModes, noop, nil
 		}
 	}
 
-	return extractEmbeddedTemplates()
+	return extractEmbeddedSubstrate()
 }
 
-// extractEmbeddedTemplates copies the embedded data/.scion/templates
-// tree to a tmpdir and returns its path. The cleanup func removes the
-// tmpdir; callers should defer it.
-func extractEmbeddedTemplates() (string, func(), error) {
-	tmpDir, err := os.MkdirTemp("", "darken-templates-*")
+// extractEmbeddedSubstrate copies both data/.scion/templates and
+// data/.scion/modes to a single tmpdir, side-by-side, and returns
+// (templatesDir, modesDir, cleanup). Layout:
+//
+//	<tmp>/templates/<role>/scion-agent.yaml
+//	<tmp>/modes/<name>.yaml
+//
+// The cleanup func removes the parent tmpdir.
+func extractEmbeddedSubstrate() (string, string, func(), error) {
+	tmpDir, err := os.MkdirTemp("", "darken-substrate-*")
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	cleanup := func() { os.RemoveAll(tmpDir) }
 
-	const root = "data/.scion/templates"
-	walkErr := fs.WalkDir(substrate.EmbeddedFS(), root, func(path string, d fs.DirEntry, err error) error {
+	templatesDir := filepath.Join(tmpDir, "templates")
+	modesDir := filepath.Join(tmpDir, "modes")
+
+	if err := extractEmbeddedTree("data/.scion/templates", templatesDir); err != nil {
+		cleanup()
+		return "", "", nil, fmt.Errorf("extract embedded templates: %w", err)
+	}
+	if err := extractEmbeddedTree("data/.scion/modes", modesDir); err != nil {
+		cleanup()
+		return "", "", nil, fmt.Errorf("extract embedded modes: %w", err)
+	}
+	return templatesDir, modesDir, cleanup, nil
+}
+
+// extractEmbeddedTree walks an embed root and writes each file to
+// dstRoot, expanding manifest placeholders as it goes.
+func extractEmbeddedTree(srcRoot, dstRoot string) error {
+	if err := os.MkdirAll(dstRoot, 0o755); err != nil {
+		return err
+	}
+	return fs.WalkDir(substrate.EmbeddedFS(), srcRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if path == root {
+		if path == srcRoot {
 			return nil
 		}
-		rel := strings.TrimPrefix(path, root+"/")
-		dst := filepath.Join(tmpDir, rel)
+		rel := strings.TrimPrefix(path, srcRoot+"/")
+		dst := filepath.Join(dstRoot, rel)
 		if d.IsDir() {
 			return os.MkdirAll(dst, 0o755)
 		}
@@ -177,18 +229,12 @@ func extractEmbeddedTemplates() (string, func(), error) {
 		if err != nil {
 			return err
 		}
-		// Substitute ${DARKEN_*} placeholders in scion-agent.yaml manifests.
 		content := string(body)
 		if strings.HasSuffix(path, "scion-agent.yaml") {
 			content = expandManifest(content)
 		}
 		return os.WriteFile(dst, []byte(content), 0o644)
 	})
-	if walkErr != nil {
-		cleanup()
-		return "", nil, fmt.Errorf("extract embedded templates: %w", walkErr)
-	}
-	return tmpDir, cleanup, nil
 }
 
 func finalDoctor() error {
