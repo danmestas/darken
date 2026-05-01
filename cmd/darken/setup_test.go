@@ -26,6 +26,13 @@ exit 0
 `
 	scionStub := `#!/bin/sh
 echo "scion $@" >> ` + logPath + `
+# Path of the import-state file. Each role registered via 'templates import'
+# adds a line; 'templates push' then requires the role be present.
+state="` + filepath.Join(stubDir, "scion-import-state") + `"
+
+# Strip global flags to find the subcommand.
+while [ "$1" = "--global" ] || [ "$1" = "--no-hub" ]; do shift; done
+
 case "$1" in
   list)
     case "$2" in
@@ -39,6 +46,46 @@ case "$1" in
       echo "codex_auth"
       echo "gemini_auth"
     fi
+    ;;
+  templates)
+    sub="$2"
+    case "$sub" in
+      import)
+        if [ "$3" = "--all" ]; then
+          dir="$4"
+          if [ ! -d "$dir" ]; then
+            echo "Error: import --all: directory not found: $dir" >&2
+            exit 1
+          fi
+          for d in "$dir"/*/; do
+            [ -d "$d" ] || continue
+            role=$(basename "$d")
+            echo "$role" >> "$state"
+          done
+        else
+          if [ -z "$3" ]; then
+            echo "Error: import: path required" >&2
+            exit 1
+          fi
+          role=$(basename "$3")
+          echo "$role" >> "$state"
+        fi
+        ;;
+      push)
+        role="$3"
+        if [ -z "$role" ]; then
+          echo "Error: push: role required" >&2
+          exit 1
+        fi
+        if [ ! -f "$state" ] || ! grep -qx "$role" "$state"; then
+          echo "Error: template '$role' not found locally" >&2
+          exit 1
+        fi
+        ;;
+      list)
+        if [ -f "$state" ]; then cat "$state"; fi
+        ;;
+    esac
     ;;
 esac
 exit 0
