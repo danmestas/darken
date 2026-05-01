@@ -82,3 +82,51 @@ func TestBootstrap_BrokerProvideStep(t *testing.T) {
 		t.Fatalf("broker provide must run after scion server check, log:\n%s", got)
 	}
 }
+
+// TestEnsureAllSkillsStaged_ImportsTemplatesForLocalStore asserts that
+// ensureAllSkillsStaged calls ImportAllTemplates with the resolved
+// templatesDir. This is the regression guard for the darken-up
+// template-upload bug: without the import, scion's local store is empty
+// when uploadAllTemplatesToHub later calls templates push.
+func TestEnsureAllSkillsStaged_ImportsTemplatesForLocalStore(t *testing.T) {
+	// Prepare a fake project root with .scion/templates/ so resolveTemplatesDir
+	// returns a known, no-cleanup path. resolveTemplatesDir's first preference
+	// is repoRoot()/.scion/templates/.
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	templatesDir := filepath.Join(root, ".scion", "templates")
+	for _, role := range []string{"admin", "researcher"} {
+		dir := filepath.Join(templatesDir, role)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Plant a minimal manifest so stage-skills doesn't barf on missing yaml.
+		manifest := filepath.Join(dir, "scion-agent.yaml")
+		if err := os.WriteFile(manifest, []byte("schema_version: \"1\"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Stub bash on PATH so runSubstrateScript no-ops.
+	stubDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stubDir, "bash"),
+		[]byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	mc := &mockScionClient{}
+	setDefaultClient(t, mc)
+
+	if err := ensureAllSkillsStaged(); err != nil {
+		t.Fatalf("ensureAllSkillsStaged: %v", err)
+	}
+
+	if got := len(mc.importAllTemplatesCalls); got != 1 {
+		t.Fatalf("expected exactly 1 ImportAllTemplates call; got %d: %v",
+			got, mc.importAllTemplatesCalls)
+	}
+	if got := mc.importAllTemplatesCalls[0]; got != templatesDir {
+		t.Errorf("ImportAllTemplates called with %q; want %q", got, templatesDir)
+	}
+}
