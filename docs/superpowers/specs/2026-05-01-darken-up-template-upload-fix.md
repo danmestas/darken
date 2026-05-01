@@ -113,7 +113,7 @@ Files changed: bootstrap.go (one new loop), scion_client.go (new `CreateTemplate
 
 Applies when **Q-A is no** (scion `create` is reference-only) **AND** Q-B answers either yes or no — both push variants need the dir alive for the same reason.
 
-`runUp` (cmd/darken/up.go:45) becomes the single owner of the resolved templates dir. Both bootstrap stage-skills and upload-templates borrow the path.
+`runUp` resolves the templates dir, defers cleanup, and constructs a `ScionClient` that holds the dir as hidden state. The dir-lifetime concern lives in two scopes only: `runUp` (owner) and `ScionClient` (consumer). Bootstrap and upload-templates are dir-blind — they call `client.PushTemplate(role)` and don't know where the bytes live.
 
 ```go
 func runUp(...) error {
@@ -121,20 +121,24 @@ func runUp(...) error {
     if err != nil { return err }
     defer cleanup()
 
-    if err := runBootstrap(dir, ...); err != nil { return err }
-    if err := uploadAllTemplatesToHub(dir); err != nil { return err }
+    client := NewScionClient(WithTemplatesDir(dir))
+
+    if err := runBootstrap(client, ...); err != nil { return err }
+    if err := uploadAllTemplatesToHub(client); err != nil { return err }
     return nil
 }
 ```
 
+`ScionClient.PushTemplate(role)` signature stays as today. Internally, when scion's CLI requires a path (either `--from` or two-step `create`), the client reads its own `templatesDir` field and assembles the per-role path. Callers ask for "push template admin" without knowing about dirs.
+
 | File | Function | Before | After |
 |---|---|---|---|
-| cmd/darken/bootstrap.go:83 | `ensureAllSkillsStaged` | resolves internally | takes `dir string` |
-| cmd/darken/setup.go:50 | `uploadAllTemplatesToHub` | iterates roles, `client.PushTemplate(role)` | takes `dir string`, calls `client.PushTemplate(role, dir)` |
-| cmd/darken/scion_client.go:83 | `PushTemplate` | `PushTemplate(role)` | `PushTemplate(role, dir)` |
-| cmd/darken/scion_client.go:84 | exec form | `scion --global templates push <role>` | `scion --global templates push <role> --from <dir>/<role>` (Q-B yes) OR two-step `create <role> <dir>/<role>` then `push <role>` (Q-B no) |
+| cmd/darken/scion_client.go | `ScionClient` constructor | implicit zero-value | `NewScionClient(opts ...Option)` with `WithTemplatesDir(dir)` functional option |
+| cmd/darken/scion_client.go:83 | `PushTemplate(role)` | shells `scion --global templates push <role>` | shells `scion --global templates push <role> --from <c.templatesDir>/<role>` (Q-B yes) OR two-step `create <role> <c.templatesDir>/<role>` then `push <role>` (Q-B no) |
+| cmd/darken/setup.go:50 | `uploadAllTemplatesToHub` | uses `defaultScionClient` | takes `client ScionClient`; iterates roles; calls `client.PushTemplate(role)` |
+| cmd/darken/bootstrap.go:83 | `ensureAllSkillsStaged` | resolves internally | takes the resolved `dir string` |
 
-Branch B accepts the cost of widening `PushTemplate`'s interface and wiring the dir through three layers because no other path is available given Q-A no.
+`PushTemplate` signature unchanged. Test mocks at scion_client_test.go:43 unchanged.
 
 ### Decision rule
 
@@ -183,15 +187,15 @@ Both are invariant tests guarding against regressions in the chosen design.
 
 ### Existing tests
 
-`scion_client_test.go:119` (mocked `PushTemplate` call-count) keeps catching client-API regressions. Under Branch A it stays as-is; under Branch B the mock signature updates to match.
+`scion_client_test.go:119` (mocked `PushTemplate` call-count) keeps catching client-API regressions under either branch — `PushTemplate(role)` signature is unchanged.
 
 `setup_test.go:276-303` (verifies the `--global templates push <role>` invocation shape) keeps catching invocation-shape regressions.
 
 ## Backward-compatibility
 
 - **darkish-factory.** `.scion/templates/<role>/` exists at repo root. `resolveTemplatesDir` returns repo-root path with a no-op cleanup. No extraction. No behavior change under either branch.
-- **All other projects.** Branch A: 14 extra `templates create` execs during bootstrap; templates registered. Branch B: the dir survives until push (one-step) or until create+push (two-step). Either way: zero successful uploads → fourteen.
-- **Public function signatures.** Branch A: `ScionClient` gains a method (`CreateTemplate`); no existing method changes. Branch B: `ScionClient.PushTemplate` gains a parameter — breaking change for any external caller. There are none in the repo. No external Go-import surface in either case.
+- **All other projects.** Branch A: 14 extra `templates create` execs during bootstrap; templates registered. Branch B: client holds the dir; push reads its per-role path internally. Either way: zero successful uploads → fourteen.
+- **Public function signatures.** Branch A: `ScionClient` gains a method (`CreateTemplate`); no existing method changes. Branch B: `ScionClient` gains an optional constructor (`NewScionClient(WithTemplatesDir(...))`) and an internal field; `PushTemplate(role)` signature unchanged. No breaking change to existing callers in either branch.
 
 ## Migration
 
