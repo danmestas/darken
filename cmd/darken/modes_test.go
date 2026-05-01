@@ -85,3 +85,45 @@ func TestModes_UnknownSubcommand(t *testing.T) {
 		t.Errorf("error should mention 'unknown': %v", err)
 	}
 }
+
+func TestModesShow_MissingMode(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	dir := filepath.Join(root, ".scion", "modes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Don't write any mode files.
+	err := runModesShow("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for missing mode")
+	}
+	if !strings.Contains(err.Error(), "nonexistent") {
+		t.Errorf("error should mention mode name: %v", err)
+	}
+}
+
+func TestModesShow_CycleDetected(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	dir := filepath.Join(root, ".scion", "modes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"a.yaml": "description: \"a\"\nextends: b\nskills: []\n",
+		"b.yaml": "description: \"b\"\nextends: a\nskills: []\n",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := runModesShow("a")
+	if err == nil {
+		t.Fatal("expected cycle error")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error should mention cycle: %v", err)
+	}
+}
