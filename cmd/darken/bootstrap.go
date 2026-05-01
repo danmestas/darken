@@ -87,7 +87,7 @@ func ensureAllSkillsStaged() error {
 	}
 	defer cleanup()
 
-	return withTemplatesDirEnv(templatesDir, func() error {
+	if err := withTemplatesDirEnv(templatesDir, func() error {
 		dirs, err := os.ReadDir(templatesDir)
 		if err != nil {
 			return fmt.Errorf("read templates dir %s: %w", templatesDir, err)
@@ -101,7 +101,18 @@ func ensureAllSkillsStaged() error {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Register every canonical role with scion's local template store so
+	// uploadAllTemplatesToHub can push them. The deferred cleanup above
+	// removes the source dir; scion's import copies bodies into its own
+	// store, so post-cleanup push works.
+	if err := defaultScionClient.ImportAllTemplates(templatesDir); err != nil {
+		return fmt.Errorf("import templates: %w", err)
+	}
+	return nil
 }
 
 // withTemplatesDirEnv runs fn with DARKEN_TEMPLATES_DIR set to dir,
