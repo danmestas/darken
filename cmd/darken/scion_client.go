@@ -87,46 +87,28 @@ func (c *execScionClient) SecretList() (string, error) {
 
 func (c *execScionClient) StartAgent(name string, args []string) error {
 	full := append([]string{"start", name}, args...)
-	cmd := scionCmdWithEnv(full)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err, _ := runScionCmd(scionCmdWithEnv(full))
+	return err
 }
 
 func (c *execScionClient) BrokerProvide() error {
-	cmd := scionCmdWithEnv([]string{"broker", "provide"})
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"broker", "provide"}))
+	return err
 }
 
 func (c *execScionClient) PushTemplate(role string) error {
-	cmd := scionCmdWithEnv([]string{"--global", "--non-interactive", "templates", "push", role})
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"--global", "--non-interactive", "templates", "push", role}))
+	return err
 }
 
 func (c *execScionClient) ImportAllTemplates(dir string) error {
-	// Buffer stderr so we can suppress scion's cobra Usage block on the
-	// known "no importable agent definitions" failure mode. Replaying the
-	// buffer on success or on unrecognized failures preserves operator
-	// visibility for everything else.
-	var stderrBuf bytes.Buffer
 	cmd := scionCmdWithEnv([]string{"--global", "--non-interactive", "templates", "import", "--all", dir})
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = &stderrBuf
-	err := cmd.Run()
-	stderr := stderrBuf.String()
-	if err != nil {
-		if strings.Contains(stderr, "no importable agent definitions") {
-			return fmt.Errorf("scion templates import: no agent definitions in %s — templates dir is empty or missing role subdirs", dir)
-		}
-		os.Stderr.WriteString(stderr)
-		return fmt.Errorf("scion templates import: %w", err)
+	err, suppressed := runScionCmd(cmd, "no importable agent definitions")
+	if suppressed {
+		return fmt.Errorf("scion templates import: no agent definitions in %s — templates dir is empty or missing role subdirs", dir)
 	}
-	if stderr != "" {
-		os.Stderr.WriteString(stderr)
+	if err != nil {
+		return fmt.Errorf("scion templates import: %w", err)
 	}
 	return nil
 }
@@ -134,24 +116,55 @@ func (c *execScionClient) ImportAllTemplates(dir string) error {
 func (c *execScionClient) GroveInit(targetDir string) error {
 	cmd := scionCmdWithEnv([]string{"grove", "init"})
 	cmd.Dir = targetDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err, _ := runScionCmd(cmd)
+	return err
 }
 
 func (c *execScionClient) CleanGrove(targetDir string) error {
 	cmd := scionCmdWithEnv([]string{"clean", "--yes"})
 	cmd.Dir = targetDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err, _ := runScionCmd(cmd)
+	return err
 }
 
 func (c *execScionClient) BrokerWithdraw() error {
-	cmd := scionCmdWithEnv([]string{"broker", "withdraw"})
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"broker", "withdraw"}))
+	return err
+}
+
+// runScionCmd is the shared transport for execScionClient methods that
+// pipe scion's stdout/stderr to the operator. Stderr is buffered so we
+// can suppress scion's cobra Usage block on known runtime-error messages
+// (e.g. "no importable agent definitions found"), which would otherwise
+// dump the full Usage as noise. Returns:
+//
+//   - err = the underlying cmd.Run() error (or nil)
+//   - suppressed = true iff err is non-nil AND a knownNoisy substring
+//     matched the buffered stderr. Caller wraps the error with a
+//     friendly message; the noisy stderr is dropped.
+//
+// On success, buffered stderr is replayed so progress output reaches
+// the operator. On unknown errors, stderr passes through verbatim so
+// the operator can debug.
+func runScionCmd(cmd *exec.Cmd, knownNoisy ...string) (error, bool) {
+	var stderrBuf bytes.Buffer
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = &stderrBuf
+	err := cmd.Run()
+	stderr := stderrBuf.String()
+	if err != nil {
+		for _, pat := range knownNoisy {
+			if strings.Contains(stderr, pat) {
+				return err, true
+			}
+		}
+		os.Stderr.WriteString(stderr)
+		return err, false
+	}
+	if stderr != "" {
+		os.Stderr.WriteString(stderr)
+	}
+	return nil, false
 }
 
 func (c *execScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {
