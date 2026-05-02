@@ -85,10 +85,17 @@ type ScionClient interface {
 	// uploadAllTemplatesToHub.
 	DeleteTemplate(role string) error
 
-	// PushSecret uploads a credential file to the Hub under the given
-	// secret name. Used by HubSecrets.Ensure once the bash stage-creds.sh
-	// is replaced by native Go (Phase F).
-	PushSecret(name, filePath string) error
+	// PushFileSecret uploads a credential file to the Hub. target is
+	// the path-in-container the agent expects; srcPath is the file on
+	// the host to read content from. Maps to:
+	//   scion hub secret set --type file --target <target> <name> @<srcPath>
+	PushFileSecret(name, target, srcPath string) error
+
+	// PushEnvSecret uploads a value as an env-type secret named for
+	// the env var it'll populate inside the container. Maps to:
+	//   scion hub secret set --type env --target <name> <name> @<tmpfile>
+	// where tmpfile holds value.
+	PushEnvSecret(name, value string) error
 }
 
 // execScionClient is the production ScionClient that delegates to the scion binary.
@@ -219,9 +226,36 @@ func (c *execScionClient) DeleteTemplate(role string) error {
 	return err
 }
 
-func (c *execScionClient) PushSecret(name, filePath string) error {
-	err, _ := runScionCmd(scionCmdWithEnv([]string{"hub", "secret", "push", name, "--from-file", filePath}))
+func (c *execScionClient) PushFileSecret(name, target, srcPath string) error {
+	cmd := scionCmdWithEnv([]string{
+		"hub", "secret", "set",
+		"--type", "file",
+		"--target", target,
+		name, "@" + srcPath,
+	})
+	err, _ := runScionCmd(cmd)
 	return err
+}
+
+func (c *execScionClient) PushEnvSecret(name, value string) error {
+	tmp, err := os.CreateTemp("", "darken-secret-*")
+	if err != nil {
+		return fmt.Errorf("create temp for env secret: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString(value); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write temp for env secret: %w", err)
+	}
+	tmp.Close()
+	cmd := scionCmdWithEnv([]string{
+		"hub", "secret", "set",
+		"--type", "env",
+		"--target", name,
+		name, "@" + tmp.Name(),
+	})
+	err2, _ := runScionCmd(cmd)
+	return err2
 }
 
 func (c *execScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {

@@ -34,7 +34,10 @@ func TestBootstrapStepsAreOrdered(t *testing.T) {
 	_ = runBootstrap([]string{})
 
 	body, _ := os.ReadFile(log)
-	want := []string{"server", "make", "stage-creds.sh", "stage-skills.sh"}
+	// stage-creds.sh was replaced by native Go in Phase F, so the bash
+	// log no longer includes it. The remaining items still validate
+	// scion/make/stage-skills ordering.
+	want := []string{"server", "make", "stage-skills.sh"}
 	pos := -1
 	for _, w := range want {
 		i := strings.Index(string(body), w)

@@ -38,14 +38,16 @@ type mockScionClient struct {
 	stopAgentCalls      []string
 	deleteAgentCalls    []string
 	deleteTemplateCalls []string
-	pushSecretCalls     [][2]string
+	pushFileSecretCalls [][3]string // {name, target, srcPath}
+	pushEnvSecretCalls  [][2]string // {name, value}
 
-	startServerErr    error
-	stopServerErr     error
-	stopAgentErr      error
-	deleteAgentErr    error
-	deleteTemplateErr error
-	pushSecretErr     error
+	startServerErr     error
+	stopServerErr      error
+	stopAgentErr       error
+	deleteAgentErr     error
+	deleteTemplateErr  error
+	pushFileSecretErr  error
+	pushEnvSecretErr   error
 }
 
 func (m *mockScionClient) ServerStatus() (string, error) {
@@ -106,9 +108,13 @@ func (m *mockScionClient) DeleteTemplate(role string) error {
 	m.deleteTemplateCalls = append(m.deleteTemplateCalls, role)
 	return m.deleteTemplateErr
 }
-func (m *mockScionClient) PushSecret(name, filePath string) error {
-	m.pushSecretCalls = append(m.pushSecretCalls, [2]string{name, filePath})
-	return m.pushSecretErr
+func (m *mockScionClient) PushFileSecret(name, target, srcPath string) error {
+	m.pushFileSecretCalls = append(m.pushFileSecretCalls, [3]string{name, target, srcPath})
+	return m.pushFileSecretErr
+}
+func (m *mockScionClient) PushEnvSecret(name, value string) error {
+	m.pushEnvSecretCalls = append(m.pushEnvSecretCalls, [2]string{name, value})
+	return m.pushEnvSecretErr
 }
 
 // setDefaultClient replaces defaultScionClient for the duration of the test.

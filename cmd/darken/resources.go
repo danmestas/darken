@@ -168,15 +168,14 @@ func (DarkenImages) Ensure() error {
 }
 func (DarkenImages) Release() error { return nil }
 
-// HubSecrets stages credentials for each backend into the Hub via the
-// stage-creds.sh substrate script (Phase F replaces the bash with native
-// Go in internal/staging). Release is a no-op — secrets are hub-wide,
-// shared across projects, removed only via --purge.
+// HubSecrets stages credentials for each backend into the Hub via
+// stageHubCreds (cmd/darken/creds.go). Release is a no-op — secrets are
+// hub-wide, shared across projects, removed only via --purge.
 type HubSecrets struct{}
 
-func (HubSecrets) Name() string    { return "hub secrets pushed" }
-func (HubSecrets) Ensure() error   { return runSubstrateScript("scripts/stage-creds.sh", []string{"all"}) }
-func (HubSecrets) Release() error  { return nil }
+func (HubSecrets) Name() string   { return "hub secrets pushed" }
+func (HubSecrets) Ensure() error  { return stageHubCreds("all") }
+func (HubSecrets) Release() error { return nil }
 
 // Substrate stages per-role skill bundles and imports the templates into
 // scion's local store. Combines the two halves of the old
