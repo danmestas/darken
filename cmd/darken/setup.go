@@ -46,7 +46,12 @@ func ensureGroveInit(targetDir string) error {
 
 // uploadAllTemplatesToHub pushes all 14 canonical templates to the Hub at
 // user (global) scope via ScionClient.PushTemplate.
-// Runs after bootstrap so the scion server is guaranteed to be running.
+//
+// Precondition: scion's local template store contains every canonical
+// role. ensureAllSkillsStaged satisfies this by calling
+// ImportAllTemplates during bootstrap. Without that import, push fails
+// with "template not found locally" because scion looks up templates by
+// name in its own store and refuses to push what it has never seen.
 func uploadAllTemplatesToHub() error {
 	for _, role := range canonicalRoles {
 		fmt.Printf("uploading template %s to Hub (user scope) ...\n", role)

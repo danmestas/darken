@@ -20,6 +20,9 @@ type mockScionClient struct {
 	lookAgentOut     []byte
 	lookAgentErr     error
 
+	importAllTemplatesErr   error
+	importAllTemplatesCalls []string
+
 	startAgentCalls   [][]string
 	pushTemplateCalls []string
 	groveInitCalls    int
@@ -43,6 +46,10 @@ func (m *mockScionClient) BrokerProvide() error {
 func (m *mockScionClient) PushTemplate(role string) error {
 	m.pushTemplateCalls = append(m.pushTemplateCalls, role)
 	return m.pushTemplateErr
+}
+func (m *mockScionClient) ImportAllTemplates(dir string) error {
+	m.importAllTemplatesCalls = append(m.importAllTemplatesCalls, dir)
+	return m.importAllTemplatesErr
 }
 func (m *mockScionClient) GroveInit(targetDir string) error {
 	m.groveInitCalls++
