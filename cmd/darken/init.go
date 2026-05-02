@@ -225,53 +225,43 @@ func runBonesInit(targetDir string) error {
 }
 
 // warnIfBonesOutdated emits a stderr nudge when the installed bones is
-// older than minBonesVersion. Always best-effort — a parse failure or a
-// failed `bones --version` call is silently ignored. The warning names
-// the brew tap because that is the canonical install path.
+// older than minBonesVersion. Always best-effort: any failure to invoke
+// or parse `bones --version` is silently ignored. Non-numeric or missing
+// version components compare as 0 — a deliberately minimal semver: this
+// is the warn-if-old path, not a release-blocking check. The warning
+// names the brew tap because that is the canonical install path.
 func warnIfBonesOutdated() {
 	out, err := exec.Command("bones", "--version").Output()
 	if err != nil {
 		return
 	}
-	ver := parseBonesVersion(string(out))
-	if ver == "" || !semverLess(ver, minBonesVersion) {
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 2 || fields[0] != "bones" {
+		return
+	}
+	ver := fields[1]
+
+	verParts := strings.Split(ver, ".")
+	minParts := strings.Split(minBonesVersion, ".")
+	older := false
+	for i := range 3 {
+		var v, m int
+		if i < len(verParts) {
+			v, _ = strconv.Atoi(verParts[i])
+		}
+		if i < len(minParts) {
+			m, _ = strconv.Atoi(minParts[i])
+		}
+		if v != m {
+			older = v < m
+			break
+		}
+	}
+	if !older {
 		return
 	}
 	fmt.Fprintf(os.Stderr,
 		"warning: bones %s is older than recommended %s; "+
 			"run `brew upgrade danmestas/tap/bones` for cleaner output\n",
 		ver, minBonesVersion)
-}
-
-// parseBonesVersion extracts the X.Y.Z token from `bones --version`
-// output. Expected format: "bones 0.6.2 (commit ..., built ...)".
-// Returns the empty string on any parse failure so callers can treat
-// "unknown version" as "skip the check".
-func parseBonesVersion(s string) string {
-	fields := strings.Fields(strings.TrimSpace(s))
-	if len(fields) < 2 || fields[0] != "bones" {
-		return ""
-	}
-	return fields[1]
-}
-
-// semverLess reports whether a < b for dotted X.Y.Z version strings.
-// Non-numeric components compare as 0. Intentionally minimal: this is
-// the warn-if-old path, not a release-blocking semver check.
-func semverLess(a, b string) bool {
-	aParts := strings.Split(a, ".")
-	bParts := strings.Split(b, ".")
-	for i := range 3 {
-		var ai, bi int
-		if i < len(aParts) {
-			ai, _ = strconv.Atoi(aParts[i])
-		}
-		if i < len(bParts) {
-			bi, _ = strconv.Atoi(bParts[i])
-		}
-		if ai != bi {
-			return ai < bi
-		}
-	}
-	return false
 }
