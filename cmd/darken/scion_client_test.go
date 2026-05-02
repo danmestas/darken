@@ -154,6 +154,71 @@ func TestEnsureBrokerProvide_UsesBrokerProvide(t *testing.T) {
 	}
 }
 
+// TestImportAllTemplates_SuppressesUsageDumpOnKnownError stubs scion to
+// emulate the "no importable agent definitions found" failure (which scion
+// follows with a full cobra Usage block on stderr). The wrapped client must
+// (1) return a clear, operator-friendly error and (2) NOT surface the cobra
+// Usage block to stderr.
+func TestImportAllTemplates_SuppressesUsageDumpOnKnownError(t *testing.T) {
+	stubDir := t.TempDir()
+	scionStub := "#!/bin/sh\n" +
+		"cat >&2 <<'EOF'\n" +
+		"Error: no importable agent definitions found in /tmp/empty\n\n" +
+		"Usage:\n" +
+		"  scion templates import <source> [flags]\n\n" +
+		"Flags:\n" +
+		"      --all              Import all discovered agents\n" +
+		"EOF\n" +
+		"exit 1\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(scionStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	c := &execScionClient{}
+	stderr, err := captureStderr(func() error {
+		return c.ImportAllTemplates("/tmp/empty")
+	})
+	if err == nil {
+		t.Fatal("expected error from ImportAllTemplates, got nil")
+	}
+	if !strings.Contains(err.Error(), "no agent definitions in /tmp/empty") {
+		t.Fatalf("error should name the empty dir, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "Usage:") {
+		t.Fatalf("error should not contain cobra Usage block, got: %v", err)
+	}
+	if strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr should not surface cobra Usage block, got: %q", stderr)
+	}
+	if strings.Contains(stderr, "--all") {
+		t.Fatalf("stderr should not surface flag list, got: %q", stderr)
+	}
+}
+
+// TestImportAllTemplates_SurfacesUnknownStderr confirms that on UNRECOGNIZED
+// failures the wrapped client still surfaces scion's stderr — we only filter
+// the one known noisy mode, not all errors.
+func TestImportAllTemplates_SurfacesUnknownStderr(t *testing.T) {
+	stubDir := t.TempDir()
+	scionStub := "#!/bin/sh\necho 'Error: connection to broker refused' >&2\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(scionStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	c := &execScionClient{}
+	stderr, err := captureStderr(func() error {
+		return c.ImportAllTemplates("/tmp/whatever")
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(stderr, "broker refused") {
+		t.Fatalf("unknown errors should pass through to stderr, got: %q", stderr)
+	}
+}
+
 // TestSpawn_UsesScionClientStartAgent verifies that runSpawn calls
 // ScionClient.StartAgent instead of the raw scion binary for the start operation.
 func TestSpawn_UsesScionClientStartAgent(t *testing.T) {

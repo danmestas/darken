@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -95,10 +96,27 @@ func (c *execScionClient) PushTemplate(role string) error {
 }
 
 func (c *execScionClient) ImportAllTemplates(dir string) error {
+	// Buffer stderr so we can suppress scion's cobra Usage block on the
+	// known "no importable agent definitions" failure mode. Replaying the
+	// buffer on success or on unrecognized failures preserves operator
+	// visibility for everything else.
+	var stderrBuf bytes.Buffer
 	cmd := scionCmdWithEnv([]string{"--global", "templates", "import", "--all", dir})
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = &stderrBuf
+	err := cmd.Run()
+	stderr := stderrBuf.String()
+	if err != nil {
+		if strings.Contains(stderr, "no importable agent definitions") {
+			return fmt.Errorf("scion templates import: no agent definitions in %s — templates dir is empty or missing role subdirs", dir)
+		}
+		os.Stderr.WriteString(stderr)
+		return fmt.Errorf("scion templates import: %w", err)
+	}
+	if stderr != "" {
+		os.Stderr.WriteString(stderr)
+	}
+	return nil
 }
 
 func (c *execScionClient) GroveInit(targetDir string) error {

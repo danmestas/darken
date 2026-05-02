@@ -172,17 +172,24 @@ func withTemplatesDirEnv(dir string, fn func() error) error {
 
 // resolveSubstrateDirs returns paths to the templates and modes dirs.
 // Prefers the operator's project layout (.scion/templates + .scion/modes)
-// if present; otherwise extracts the embedded substrate to a tmpdir
-// laid out as <tmp>/templates/ and <tmp>/modes/. The returned cleanup
-// func is a no-op for the project case and an os.RemoveAll for the
-// embedded case.
+// when it has at least one role subdir; otherwise extracts the embedded
+// substrate to a tmpdir laid out as <tmp>/templates/ and <tmp>/modes/.
+// The returned cleanup func is a no-op for the project case and an
+// os.RemoveAll for the embedded case.
+//
+// Why the role-subdir guard: a workspace bootstrapped by `darken init`
+// (or hand-created) may have an empty .scion/templates/ before any
+// role canon is staged in. Returning that empty dir downstream causes
+// `scion templates import --all` to fail with "no importable agent
+// definitions". Falling back to the embedded substrate keeps `darken up`
+// working for fresh workspaces.
 func resolveSubstrateDirs() (string, string, func(), error) {
 	noop := func() {}
 
 	if root, err := repoRoot(); err == nil {
 		projectTemplates := filepath.Join(root, ".scion", "templates")
 		projectModes := filepath.Join(root, ".scion", "modes")
-		if info, statErr := os.Stat(projectTemplates); statErr == nil && info.IsDir() {
+		if info, statErr := os.Stat(projectTemplates); statErr == nil && info.IsDir() && hasRoleSubdirs(projectTemplates) {
 			// Modes dir may not exist yet on a project mid-migration;
 			// pass through whatever's there and let the script error if
 			// it actually needs it.
@@ -191,6 +198,23 @@ func resolveSubstrateDirs() (string, string, func(), error) {
 	}
 
 	return extractEmbeddedSubstrate()
+}
+
+// hasRoleSubdirs reports whether dir contains at least one subdirectory
+// other than "base". `base` is the shared common-skill bundle, not a
+// canonical role, so a templates dir holding only `base/` is still
+// effectively empty for import purposes.
+func hasRoleSubdirs(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() && e.Name() != "base" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractEmbeddedSubstrate copies both data/.scion/templates and
