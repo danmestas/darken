@@ -101,7 +101,7 @@ func (c *execScionClient) BrokerProvide() error {
 }
 
 func (c *execScionClient) PushTemplate(role string) error {
-	cmd := scionCmdWithEnv([]string{"--global", "templates", "push", role})
+	cmd := scionCmdWithEnv([]string{"--global", "--non-interactive", "templates", "push", role})
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -113,7 +113,7 @@ func (c *execScionClient) ImportAllTemplates(dir string) error {
 	// buffer on success or on unrecognized failures preserves operator
 	// visibility for everything else.
 	var stderrBuf bytes.Buffer
-	cmd := scionCmdWithEnv([]string{"--global", "templates", "import", "--all", dir})
+	cmd := scionCmdWithEnv([]string{"--global", "--non-interactive", "templates", "import", "--all", dir})
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = &stderrBuf
 	err := cmd.Run()
