@@ -9,25 +9,29 @@ import (
 
 // mockScionClient is a configurable ScionClient for unit tests.
 type mockScionClient struct {
-	serverStatusOut  string
-	serverStatusErr  error
-	secretListOut    string
-	secretListErr    error
-	startAgentErr    error
-	brokerProvideErr error
-	pushTemplateErr  error
-	groveInitErr     error
-	lookAgentOut     []byte
-	lookAgentErr     error
+	serverStatusOut    string
+	serverStatusErr    error
+	secretListOut      string
+	secretListErr      error
+	startAgentErr      error
+	brokerProvideErr   error
+	brokerWithdrawErr  error
+	pushTemplateErr    error
+	groveInitErr       error
+	cleanGroveErr      error
+	lookAgentOut       []byte
+	lookAgentErr       error
 
 	importAllTemplatesErr   error
 	importAllTemplatesCalls []string
 
-	startAgentCalls   [][]string
-	pushTemplateCalls []string
-	groveInitCalls    int
-	groveInitDir      string
-	lookAgentCalls    []string
+	startAgentCalls     [][]string
+	pushTemplateCalls   []string
+	groveInitCalls      int
+	groveInitDir        string
+	cleanGroveCalls     []string
+	brokerWithdrawCalls int
+	lookAgentCalls      []string
 }
 
 func (m *mockScionClient) ServerStatus() (string, error) {
@@ -55,6 +59,14 @@ func (m *mockScionClient) GroveInit(targetDir string) error {
 	m.groveInitCalls++
 	m.groveInitDir = targetDir
 	return m.groveInitErr
+}
+func (m *mockScionClient) CleanGrove(targetDir string) error {
+	m.cleanGroveCalls = append(m.cleanGroveCalls, targetDir)
+	return m.cleanGroveErr
+}
+func (m *mockScionClient) BrokerWithdraw() error {
+	m.brokerWithdrawCalls++
+	return m.brokerWithdrawErr
 }
 func (m *mockScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {
 	m.lookAgentCalls = append(m.lookAgentCalls, name)
