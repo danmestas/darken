@@ -42,6 +42,53 @@ type Resource interface {
 	Release() error
 }
 
+// Observer is an optional capability for Resources that can cheaply
+// report their current state without mutating it. Used by `darken
+// doctor` (Phase H) to walk the same lifecycle slice that `darken up`
+// and `darken down` use, producing a read-only state report.
+//
+// Resources that genuinely have observable state implement this; ones
+// that don't (e.g., HubSecrets — verifying secrets without staging
+// them is non-trivial) skip the interface and are reported as
+// "(no observer)" in doctor output.
+//
+// Status convention: "ok" / "missing" / "stopped" / "drift" / etc.
+// Detail is a human-readable line — e.g. version strings, paths.
+type Observer interface {
+	Resource
+	Observe() (status, detail string)
+}
+
+// LifecycleObservation is the doctor-friendly shape of a single
+// Observer.Observe() call. Used by lifecycleObservations to package
+// resource state for the doctor renderer without leaking the
+// Resource/Observer types into doctor.go.
+type LifecycleObservation struct {
+	Name   string
+	Status string
+	Detail string
+}
+
+// lifecycleObservations walks `lifecycle` and returns one
+// LifecycleObservation per resource that implements Observer.
+// Resources without Observe() are skipped — `darken doctor` handles
+// the "no observer" case as a Skip entry, separate from the main
+// DoctorCheck registry to keep severity/remediation handling intact.
+func lifecycleObservations() []LifecycleObservation {
+	out := make([]LifecycleObservation, 0, len(lifecycle))
+	for _, r := range lifecycle {
+		if obs, ok := r.(Observer); ok {
+			status, detail := obs.Observe()
+			out = append(out, LifecycleObservation{
+				Name:   r.Name(),
+				Status: status,
+				Detail: detail,
+			})
+		}
+	}
+	return out
+}
+
 // lifecycle is the canonical, ordered list of resources darken manages.
 // The slice order encodes the topology: each resource may depend on
 // resources earlier in the slice. `darken up` walks forward; `darken
@@ -104,6 +151,12 @@ func (DockerDaemon) Ensure() error {
 	return nil
 }
 func (DockerDaemon) Release() error { return nil }
+func (DockerDaemon) Observe() (string, string) {
+	if err := (DockerDaemon{}).Ensure(); err != nil {
+		return "missing", "docker info failed"
+	}
+	return "ok", ""
+}
 
 // ScionCLI ensures the scion binary is on PATH. Release is a no-op —
 // the binary is installed via brew, not by darken, and persists across
@@ -118,6 +171,13 @@ func (ScionCLI) Ensure() error {
 	return nil
 }
 func (ScionCLI) Release() error { return nil }
+func (ScionCLI) Observe() (string, string) {
+	path, err := exec.LookPath("scion")
+	if err != nil {
+		return "missing", "scion not on PATH"
+	}
+	return "ok", path
+}
 
 // ScionServer ensures the scion daemon is running. Idempotent: if status
 // reports OK, Ensure is a no-op. Release is a no-op — leaving the server
@@ -133,6 +193,12 @@ func (ScionServer) Ensure() error {
 	return defaultScionClient.StartServer()
 }
 func (ScionServer) Release() error { return nil }
+func (ScionServer) Observe() (string, string) {
+	if _, err := defaultScionClient.ServerStatus(); err != nil {
+		return "stopped", "scion server status returned error"
+	}
+	return "ok", ""
+}
 
 // GroveBroker registers the local broker as a provider for the project
 // grove (Ensure) or removes that registration (Release). This is the
@@ -232,6 +298,18 @@ func (Grove) Release() error {
 		return nil
 	}
 	return defaultScionClient.CleanGrove(root)
+}
+func (Grove) Observe() (string, string) {
+	root, err := repoRoot()
+	if err != nil {
+		return "missing", "no repo root"
+	}
+	groveID := filepath.Join(root, ".scion", "grove-id")
+	body, err := os.ReadFile(groveID)
+	if err != nil {
+		return "missing", "no .scion/grove-id"
+	}
+	return "ok", strings.TrimSpace(string(body))
 }
 
 // ProjectAgents is a down-only resource: agents are spawned via

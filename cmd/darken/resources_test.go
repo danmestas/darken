@@ -141,6 +141,40 @@ func TestReleaseAll_VisitsResourcesInReverse(t *testing.T) {
 	}
 }
 
+// TestLifecycleObservations_ReturnsObserverResources confirms that
+// lifecycleObservations walks the lifecycle slice and returns one entry
+// per Resource that implements Observer. Resources without Observe()
+// are silently skipped — they're reported as "(no observer)" in doctor
+// output if needed, separate from this list.
+func TestLifecycleObservations_ReturnsObserverResources(t *testing.T) {
+	obs := lifecycleObservations()
+	if len(obs) == 0 {
+		t.Fatal("expected at least one Observer-equipped resource in lifecycle")
+	}
+	// Every entry must have a non-empty name.
+	for _, o := range obs {
+		if o.Name == "" {
+			t.Errorf("observation has empty name: %+v", o)
+		}
+		if o.Status == "" {
+			t.Errorf("observation has empty status: %+v", o)
+		}
+	}
+}
+
+// TestObserverInterface_Compile is a compile-time check that confirms
+// the Observer interface embeds Resource correctly. If a resource
+// implements Observe() but not Resource methods, this would fail at
+// compile time. Run as a no-op test purely to surface the assertion.
+func TestObserverInterface_Compile(t *testing.T) {
+	// var _ Observer = ... lines below will fail to compile if any
+	// resource breaks the interface contract — that's the point.
+	var _ Observer = DockerDaemon{}
+	var _ Observer = ScionCLI{}
+	var _ Observer = ScionServer{}
+	var _ Observer = Grove{}
+}
+
 func TestReleaseAll_BestEffortContinuesPastErrors(t *testing.T) {
 	var seen []string
 	bang := errors.New("bang")
