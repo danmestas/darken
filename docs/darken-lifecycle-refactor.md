@@ -187,13 +187,27 @@ Each phase below is an independent, shippable PR. They do not need to land in th
 | C | Port down-only resources: `ProjectAgents`, `AgentWorktrees`, `Grove` | These have no-op `Ensure()`. `runDown` shrinks to a 5-line reverse walker. The forgotten-pair bug class is now structurally impossible. |
 | D | Extract `runScionCmd` helper; route all `ScionClient` methods through it | Removes duplicated stderr-buffering. Each method declares its own `knownNoisy` list. |
 | E | Add `StopAgent`, `DeleteAgent`, `ServerStop`, `DeleteTemplate`, `PushSecret` to `ScionClient`; convert remaining raw `exec.Command` paths | Closes the "everything goes through the interface" invariant. Resources route exclusively through the interface. |
-| F | Delete `stage-creds.sh` (folded into `HubSecrets.Ensure`) | Remove subprocess hop. Delete bash file + embed.FS plumbing for it. |
-| G | Delete `stage-skills.sh` (folded into `Substrate.Ensure`) | Same. |
-| H | Add `Observer` interface; refactor `darken doctor` to walk the same `[]Resource` | Three commands, one world model. Adding a new resource makes it visible to doctor automatically. |
+| F | Native Go for `stage-creds.sh` host-side calls (folded into `HubSecrets.Ensure`, `runCreds`, `runSpawn`); bash remains for container-side `spawn.sh` and operator-facing `darken creds` invocations the embed still ships | Remove host-side subprocess hop. Full deletion of the bash file is blocked on the container-side spawn.sh refactor — out of scope for this PR. |
+| G | Native Go for `stage-skills.sh` rebuild mode (folded into `Substrate.Ensure` and `stageSkillsForRole`); bash remains for `darken skills add/remove/diff` operator commands and container-side use | Same trade as Phase F — host-side subprocess hop gone, full deletion deferred. |
+| H | Add `Observer` interface; ship `lifecycleObservations()` helper and Observe() impls on 4 resources (Docker, ScionCLI, ScionServer, Grove). `darken doctor` consolidation deferred to a follow-up PR — the existing DoctorCheck registry has severity/remediation/ID features that need to merge into the Observer model first | Closes the design loop and proves Observer is workable; the doctor consolidation is mechanical polish. |
 
-After H: `scripts/` directory is empty (or close to it), the embed.FS no longer ships bash, and `darken up`/`darken down`/`darken doctor` are three traversals of `lifecycle`.
+After H: host-side orchestration code shrinks ~50%. `darken up`/`darken down` are two traversals of `lifecycle`; `darken doctor` is positioned to become the third in a follow-up.
 
-Estimated total: ~6–8 PRs over a week of focused work. Each PR is small enough to review in one sitting (~200–400 LOC including tests). Phases A–C are the structural change; D–H are cleanup that compounds on it.
+This refactor ships in one PR (the operator's "specs ship with implementation" rule), as a sequence of focused commits A→H. Each commit is small enough to review in one sitting (~200–400 LOC including tests).
+
+## What's actually deleted vs deferred
+
+This PR removes:
+- The hand-rolled `[]struct{name, fn}` step lists in `runBootstrap` and `runDown`
+- 5 standalone `ensure*` functions (logic moved into Resource methods)
+- 3 standalone down-side functions (logic moved into Resource methods)
+- All raw `exec.Command` paths for scion in `cmd/darken/` (everything routes through `ScionClient`)
+- ~125 lines of bash credential-staging logic from the host invocation path
+- ~250 lines of bash skill-staging logic from the host invocation path
+
+This PR does *not* delete:
+- `scripts/stage-creds.sh` and `scripts/stage-skills.sh` files — the embedded copies are still consumed by container-side `spawn.sh` (out of scope).
+- The DoctorCheck registry in `doctor.go` — full unification is a follow-up that needs to merge severity/remediation/ID semantics into the Observer model.
 
 ## What we're deliberately NOT doing
 
