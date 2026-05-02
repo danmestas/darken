@@ -89,6 +89,7 @@ sync-embed-data:
 		$(SUBSTRATE_DATA)/images $(SUBSTRATE_DATA)/skills \
 		$(SUBSTRATE_DATA)/templates; \
 	cp -R .scion/templates $(SUBSTRATE_DATA)/.scion/; \
+	cp -R .scion/modes $(SUBSTRATE_DATA)/.scion/; \
 	cp scripts/bootstrap.sh scripts/spawn.sh scripts/stage-creds.sh \
 		scripts/stage-skills.sh $(SUBSTRATE_DATA)/scripts/; \
 	cp images/Makefile images/README.md $(SUBSTRATE_DATA)/images/; \
