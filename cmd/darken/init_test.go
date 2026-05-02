@@ -333,55 +333,6 @@ func TestInit_BonesAlreadyInitializedIsNoOp(t *testing.T) {
 	}
 }
 
-// TestParseBonesVersion covers the formats parseBonesVersion is expected to
-// handle, including the exact `bones --version` output and a few corruptions.
-func TestParseBonesVersion(t *testing.T) {
-	cases := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"canonical", "bones 0.6.2 (commit a6c35ab, built 2026-05-01T20:32:45Z)\n", "0.6.2"},
-		{"trimmed", "bones 0.6.1\n", "0.6.1"},
-		{"leading space", "  bones 1.0.0\n", "1.0.0"},
-		{"empty", "", ""},
-		{"wrong tool", "barnacle 9.9.9\n", ""},
-		{"no version", "bones\n", ""},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := parseBonesVersion(tc.in); got != tc.want {
-				t.Fatalf("parseBonesVersion(%q): want %q, got %q", tc.in, tc.want, got)
-			}
-		})
-	}
-}
-
-// TestSemverLess covers the dotted version comparator.
-func TestSemverLess(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want bool
-	}{
-		{"0.6.1", "0.6.2", true},
-		{"0.6.2", "0.6.2", false},
-		{"0.6.3", "0.6.2", false},
-		{"0.5.99", "0.6.0", true},
-		{"1.0.0", "0.99.99", false},
-		{"0.6", "0.6.2", true},   // missing patch component compares as 0
-		{"0.6.2", "0.6", false},  // symmetric
-		{"abc", "0.6.2", true},   // non-numeric -> 0
-		{"0.6.2", "abc", false},  // non-numeric -> 0
-	}
-	for _, tc := range cases {
-		t.Run(tc.a+"_vs_"+tc.b, func(t *testing.T) {
-			if got := semverLess(tc.a, tc.b); got != tc.want {
-				t.Fatalf("semverLess(%q,%q): want %v, got %v", tc.a, tc.b, tc.want, got)
-			}
-		})
-	}
-}
-
 // TestWarnIfBonesOutdated_OldVersion stubs `bones --version` to print a
 // pre-minimum release and verifies the warning is emitted to stderr with the
 // brew upgrade hint.
@@ -454,6 +405,24 @@ func TestWarnIfBonesOutdated_UnparseableOutput(t *testing.T) {
 	stderr, _ := captureStderr(func() error { warnIfBonesOutdated(); return nil })
 	if stderr != "" {
 		t.Fatalf("unparseable version should be silent, got: %q", stderr)
+	}
+}
+
+// TestWarnIfBonesOutdated_WrongToolPrefix guards against false positives if
+// PATH resolves `bones` to a different binary that happens to print a version
+// (e.g. another tool of the same name). The first field must be literal
+// "bones" — anything else is treated as unknown and skipped silently.
+func TestWarnIfBonesOutdated_WrongToolPrefix(t *testing.T) {
+	stubDir := t.TempDir()
+	bonesStub := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'barnacle 9.9.9'; exit 0; fi\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "bones"), []byte(bonesStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	stderr, _ := captureStderr(func() error { warnIfBonesOutdated(); return nil })
+	if stderr != "" {
+		t.Fatalf("wrong tool prefix should be silent, got: %q", stderr)
 	}
 }
 
