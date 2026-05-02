@@ -47,6 +47,18 @@ type ScionClient interface {
 	// grove init applies to the correct project even when cwd differs.
 	GroveInit(targetDir string) error
 
+	// CleanGrove is the inverse of GroveInit: removes the local .scion/
+	// directory and unlinks from the Hub. Equivalent to `scion clean --yes`
+	// run inside targetDir. The earlier `scion grove delete` subcommand does
+	// not exist; CleanGrove is the canonical teardown call.
+	CleanGrove(targetDir string) error
+
+	// BrokerWithdraw removes the local broker as a provider for the
+	// current grove. Symmetric counterpart to BrokerProvide. Best-effort:
+	// callers should treat "broker not provided" / "no grove" failures as
+	// no-ops since teardown shouldn't abort on already-clean state.
+	BrokerWithdraw() error
+
 	// LookAgent returns the raw terminal output of `scion look <name>`.
 	// ANSI stripping is the caller's responsibility.
 	LookAgent(name string, extraArgs []string) ([]byte, error)
@@ -122,6 +134,21 @@ func (c *execScionClient) ImportAllTemplates(dir string) error {
 func (c *execScionClient) GroveInit(targetDir string) error {
 	cmd := scionCmdWithEnv([]string{"grove", "init"})
 	cmd.Dir = targetDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (c *execScionClient) CleanGrove(targetDir string) error {
+	cmd := scionCmdWithEnv([]string{"clean", "--yes"})
+	cmd.Dir = targetDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (c *execScionClient) BrokerWithdraw() error {
+	cmd := scionCmdWithEnv([]string{"broker", "withdraw"})
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

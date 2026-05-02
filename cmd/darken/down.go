@@ -41,6 +41,7 @@ func runDown(args []string) error {
 
 	steps := []func() error{
 		stopProjectAgents,
+		withdrawBroker,
 		deleteProjectGrove,
 		uninstallInitFiles,
 	}
@@ -93,8 +94,30 @@ func stopProjectAgents() error {
 	return nil
 }
 
-// deleteProjectGrove invokes `scion grove delete` for the project grove
-// if .scion/grove-id is present. Best-effort.
+// withdrawBroker removes the local broker as a provider for the project
+// grove. Symmetric counterpart to the BrokerProvide call in `darken up`
+// step [4/8]. Best-effort: a failure here (broker never provided, hub
+// unreachable) shouldn't abort teardown, so the underlying error is
+// logged and swallowed rather than returned.
+func withdrawBroker() error {
+	root, err := repoRoot()
+	if err != nil {
+		return nil
+	}
+	if _, err := os.Stat(root + "/.scion/grove-id"); err != nil {
+		return nil
+	}
+	fmt.Println("darken down: withdrawing broker from grove ...")
+	if err := defaultScionClient.BrokerWithdraw(); err != nil {
+		fmt.Fprintf(os.Stderr, "darken down: broker withdraw skipped: %v\n", err)
+	}
+	return nil
+}
+
+// deleteProjectGrove removes the project's .scion/ directory and unlinks
+// it from the Hub via `scion clean`. Routes through the ScionClient
+// interface so env propagation and stderr handling stay consistent with
+// the rest of the surface. Best-effort: missing grove-id is a no-op.
 func deleteProjectGrove() error {
 	root, err := repoRoot()
 	if err != nil {
@@ -104,11 +127,7 @@ func deleteProjectGrove() error {
 		return nil
 	}
 	fmt.Println("darken down: deleting project grove ...")
-	cmd := scionCmd([]string{"grove", "delete", "-y"})
-	cmd.Dir = root
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return defaultScionClient.CleanGrove(root)
 }
 
 // uninstallInitFiles delegates to runUninstallInit with --yes so the
@@ -120,6 +139,11 @@ func uninstallInitFiles() error {
 
 // chainBonesDown runs `bones down --yes` if bones is on PATH. If missing,
 // no-op (matches the up-side fallback).
+//
+// Note: bones starts a hub momentarily during teardown to deregister
+// state before destruction. The "bones: starting hub for workspace ..."
+// line in the output is bones' own logging and is expected — not a
+// contradiction with the teardown intent.
 func chainBonesDown() error {
 	if _, err := exec.LookPath("bones"); err != nil {
 		return nil
