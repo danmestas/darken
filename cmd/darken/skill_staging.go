@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/danmestas/darken/internal/substrate"
 )
 
 // applyRoleFilter filters the skills in dir to only those visible to role.
@@ -140,30 +142,110 @@ func loadManifestForRole(harnessType string) (HarnessManifest, error) {
 }
 
 // stageSkillsForRole is the single entry point for skill staging called
-// by spawn. After the modes migration (.scion/modes/<name>.yaml), skill
-// resolution is mode-driven: the manifest carries default_mode, and the
-// shell script resolves through the modes tree with extends-chain
-// expansion. The Go-path buildSkillsStaging reads inline manifest.Skills
-// only — empty after migration — so it produces empty staging dirs.
+// by spawn. Mode-driven resolution: the manifest's default_mode (or the
+// DARKEN_MODE_OVERRIDE env var) names a mode YAML in DARKEN_MODES_DIR;
+// internal/substrate.ResolveSkillsFromFS expands the extends chain and
+// returns a deduped, ordered skill list. Each skill is copied from
+// canonical (~/projects/agent-skills/skills/<name>) into the per-role
+// staging dir, then role-visibility filtering runs.
 //
-// Until buildSkillsStaging gains mode-awareness, route through the shell
-// script unconditionally. The script handles both the override case
-// (DARKEN_MODE_OVERRIDE) and the default-mode case correctly.
+// Pre-Phase-G this routed through scripts/stage-skills.sh. The bash
+// remains for container-side use (spawn.sh) and the operator-facing
+// `darken skills` add/remove/diff commands; host-side lifecycle calls
+// now live entirely in Go.
 func stageSkillsForRole(harnessType string) error {
-	return stageSkillsViaScript(harnessType)
+	return stageSkillsNative(harnessType)
 }
 
-// stageSkillsViaScript is the shell-script fallback for stageSkillsForRole.
-// Used when the Go pipeline cannot resolve its inputs (no canonical skills
-// dir, no repo root). Applies the role filter after the script runs.
-func stageSkillsViaScript(harnessType string) error {
-	if err := runSubstrateScript("scripts/stage-skills.sh", []string{harnessType}); err != nil {
-		return fmt.Errorf("stage-skills script failed: %w", err)
-	}
+// stageSkillsNative is the Go implementation of stage-skills.sh rebuild
+// mode. Atomic publish via tmpdir + rename; the prior bash needed an
+// explicit lock dir for parallel-invocation safety, but Go's os.Rename
+// is atomic on POSIX so the lock is unnecessary.
+//
+// Important: applyRoleFilter is called at the end on every code path,
+// even when the resolution returns no skills or the manifest declares
+// no default_mode. This matches the bash + Go-shim contract: the
+// fail-closed role filter must run on the live staging dir so unreadable
+// or out-of-role skills get removed regardless of whether a rebuild
+// happened.
+func stageSkillsNative(harnessType string) error {
 	root, err := repoRoot()
 	if err != nil {
-		return nil // no repo root — nothing to filter
+		return fmt.Errorf("stage-skills: repo root: %w", err)
 	}
-	stagingDir := filepath.Join(root, ".scion", "skills-staging", harnessType)
-	return applyRoleFilter(stagingDir, harnessType)
+	stageDir := filepath.Join(root, ".scion", "skills-staging", harnessType)
+
+	templatesDir, modesDir, cleanup, err := resolveSubstrateDirs()
+	if err != nil {
+		return fmt.Errorf("stage-skills: resolve substrate: %w", err)
+	}
+	defer cleanup()
+
+	manifestPath := filepath.Join(templatesDir, harnessType, "scion-agent.yaml")
+	body, err := os.ReadFile(manifestPath)
+	if err != nil {
+		// No manifest — soft skip; still apply role filter on existing
+		// stage dir so fail-closed semantics hold.
+		fmt.Fprintf(os.Stderr, "stage-skills: read manifest for %s: %v\n", harnessType, err)
+		return applyRoleFilter(stageDir, harnessType)
+	}
+
+	mode := os.Getenv("DARKEN_MODE_OVERRIDE")
+	if mode == "" {
+		mode = scanField(string(body), "default_mode:")
+	}
+	if mode == "" {
+		// No mode declared and no override — soft no-op for the rebuild
+		// step; still run the role filter on the existing staging dir.
+		return applyRoleFilter(stageDir, harnessType)
+	}
+
+	skills, err := substrate.ResolveSkillsFromFS(os.DirFS(modesDir), mode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stage-skills: resolve mode %q for %s: %v\n", mode, harnessType, err)
+		return applyRoleFilter(stageDir, harnessType)
+	}
+	if len(skills) == 0 {
+		return applyRoleFilter(stageDir, harnessType)
+	}
+
+	canonical := skillsCanonical()
+	tmpDir := stageDir + ".tmp"
+	if err := os.RemoveAll(tmpDir); err != nil {
+		return fmt.Errorf("stage-skills: prepare tmp dir: %w", err)
+	}
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		return fmt.Errorf("stage-skills: create tmp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir) // best-effort cleanup if rename failed
+
+	for _, ref := range skills {
+		src, err := resolveSkillRef(ref, canonical)
+		if err != nil {
+			return fmt.Errorf("stage-skills: %w", err)
+		}
+		if _, err := os.Stat(src); err != nil {
+			// Source missing — log and skip this skill rather than abort
+			// the whole rebuild. Matches bash's WARNING behavior in
+			// "all" mode and avoids one missing canonical skill from
+			// blocking the entire role.
+			fmt.Fprintf(os.Stderr, "stage-skills: source skill missing for ref %q at %s\n", ref, src)
+			continue
+		}
+		name := skillBaseName(ref)
+		dest := filepath.Join(tmpDir, name)
+		if err := copyDir(src, dest); err != nil {
+			return fmt.Errorf("stage-skills: copy %q: %w", ref, err)
+		}
+		fmt.Printf("stage-skills: copied %s → %s\n", name, filepath.Join(stageDir, name))
+	}
+
+	if err := os.RemoveAll(stageDir); err != nil {
+		return fmt.Errorf("stage-skills: clean stage dir: %w", err)
+	}
+	if err := os.Rename(tmpDir, stageDir); err != nil {
+		return fmt.Errorf("stage-skills: publish: %w", err)
+	}
+
+	return applyRoleFilter(stageDir, harnessType)
 }

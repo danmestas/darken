@@ -31,7 +31,7 @@ func runSpawn(args []string) error {
 	posArgs := fs.Args()
 
 	if !*noStage {
-		if err := runSubstrateScript("scripts/stage-creds.sh", []string{"all"}); err != nil {
+		if err := stageHubCreds("all"); err != nil {
 			fmt.Fprintln(os.Stderr, "spawn: stage-creds non-fatal:", err)
 		}
 		if err := withModeOverride(*mode, func() error {

@@ -29,16 +29,14 @@ func runUp(args []string) error {
 		rest = append(rest, a)
 	}
 
-	target, err := resolveInitTarget(rest)
-	if err != nil {
+	if _, err := resolveInitTarget(rest); err != nil {
 		return err
 	}
 	if err := runInit(rest); err != nil {
 		return err
 	}
-	if err := ensureGroveInit(target); err != nil {
-		return err
-	}
+	// Grove init now lives inside the lifecycle (Grove.Ensure), so
+	// runBootstrap's walker handles it. No explicit ensureGroveInit call.
 	if err := runBootstrap(nil); err != nil {
 		return err
 	}

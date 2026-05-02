@@ -32,6 +32,22 @@ type mockScionClient struct {
 	cleanGroveCalls     []string
 	brokerWithdrawCalls int
 	lookAgentCalls      []string
+
+	startServerCalls    int
+	stopServerCalls     int
+	stopAgentCalls      []string
+	deleteAgentCalls    []string
+	deleteTemplateCalls []string
+	pushFileSecretCalls [][3]string // {name, target, srcPath}
+	pushEnvSecretCalls  [][2]string // {name, value}
+
+	startServerErr     error
+	stopServerErr      error
+	stopAgentErr       error
+	deleteAgentErr     error
+	deleteTemplateErr  error
+	pushFileSecretErr  error
+	pushEnvSecretErr   error
 }
 
 func (m *mockScionClient) ServerStatus() (string, error) {
@@ -71,6 +87,34 @@ func (m *mockScionClient) BrokerWithdraw() error {
 func (m *mockScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {
 	m.lookAgentCalls = append(m.lookAgentCalls, name)
 	return m.lookAgentOut, m.lookAgentErr
+}
+func (m *mockScionClient) StartServer() error {
+	m.startServerCalls++
+	return m.startServerErr
+}
+func (m *mockScionClient) StopServer() error {
+	m.stopServerCalls++
+	return m.stopServerErr
+}
+func (m *mockScionClient) StopAgent(name string) error {
+	m.stopAgentCalls = append(m.stopAgentCalls, name)
+	return m.stopAgentErr
+}
+func (m *mockScionClient) DeleteAgent(name string) error {
+	m.deleteAgentCalls = append(m.deleteAgentCalls, name)
+	return m.deleteAgentErr
+}
+func (m *mockScionClient) DeleteTemplate(role string) error {
+	m.deleteTemplateCalls = append(m.deleteTemplateCalls, role)
+	return m.deleteTemplateErr
+}
+func (m *mockScionClient) PushFileSecret(name, target, srcPath string) error {
+	m.pushFileSecretCalls = append(m.pushFileSecretCalls, [3]string{name, target, srcPath})
+	return m.pushFileSecretErr
+}
+func (m *mockScionClient) PushEnvSecret(name, value string) error {
+	m.pushEnvSecretCalls = append(m.pushEnvSecretCalls, [2]string{name, value})
+	return m.pushEnvSecretErr
 }
 
 // setDefaultClient replaces defaultScionClient for the duration of the test.
@@ -153,16 +197,6 @@ func TestUploadAllTemplatesToHub_UsesPushTemplate(t *testing.T) {
 		if mc.pushTemplateCalls[i] != role {
 			t.Errorf("PushTemplate[%d]: want %q, got %q", i, role, mc.pushTemplateCalls[i])
 		}
-	}
-}
-
-// TestEnsureBrokerProvide_UsesBrokerProvide asserts ensureBrokerProvide
-// calls ScionClient.BrokerProvide.
-func TestEnsureBrokerProvide_UsesBrokerProvide(t *testing.T) {
-	mc := &mockScionClient{}
-	setDefaultClient(t, mc)
-	if err := ensureBrokerProvide(); err != nil {
-		t.Fatalf("ensureBrokerProvide: %v", err)
 	}
 }
 

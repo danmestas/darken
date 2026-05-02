@@ -41,9 +41,12 @@ func TestSpawnInvokesStageThenScion(t *testing.T) {
 	if err := runSpawn([]string{"smoke-1", "--type", "researcher", "task..."}); err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
+	// stage-creds is now native Go (Phase F), not a bash invocation;
+	// the test asserts spawn proceeded to scion start, which is the
+	// real ordering contract.
 	body, _ := os.ReadFile(log)
-	if !strings.Contains(string(body), "stage-creds.sh") {
-		t.Fatalf("stage-creds.sh not invoked: %s", body)
+	if !strings.Contains(string(body), "start") {
+		t.Fatalf("scion start not invoked: %s", body)
 	}
 	// REVIEW-7 consolidated skill staging into the Go-side
 	// buildSkillsStaging; spawn no longer invokes a stage-skills.sh
