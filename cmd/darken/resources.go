@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
 // Resource is one piece of state darken manages. Implementations own
@@ -43,16 +45,20 @@ type Resource interface {
 // lifecycle is the canonical, ordered list of resources darken manages.
 // The slice order encodes the topology: each resource may depend on
 // resources earlier in the slice. `darken up` walks forward; `darken
-// down` walks reverse. Phase C adds Grove + ProjectAgents +
-// AgentWorktrees to bring this to ~10 entries.
+// down` walks reverse. Down-side ordering is critical: AgentWorktrees
+// and ProjectAgents must be released BEFORE Grove (they read from
+// .scion/agents/ and the grove registry, which Grove.Release destroys).
 var lifecycle = []Resource{
 	DockerDaemon{},
 	ScionCLI{},
 	ScionServer{},
+	Grove{},
 	GroveBroker{},
 	DarkenImages{},
 	HubSecrets{},
 	Substrate{},
+	ProjectAgents{},
+	AgentWorktrees{},
 }
 
 // ensureAll walks resources forward calling Ensure(). The first error
@@ -210,3 +216,101 @@ func (Substrate) Ensure() error {
 	return defaultScionClient.ImportAllTemplates(templatesDir)
 }
 func (Substrate) Release() error { return nil }
+
+// Grove ensures the project-scoped scion grove is initialized (Ensure)
+// or removed (Release). Pulled into the lifecycle from the old
+// runUp → ensureGroveInit flow so darken up is one walker call rather
+// than init + bootstrap separately. Idempotent: ensureGroveInit checks
+// for .scion/grove-id before running scion grove init.
+type Grove struct{}
+
+func (Grove) Name() string { return "project grove" }
+func (Grove) Ensure() error {
+	root, err := repoRoot()
+	if err != nil {
+		return err
+	}
+	return ensureGroveInit(root)
+}
+func (Grove) Release() error {
+	root, err := repoRoot()
+	if err != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(root, ".scion", "grove-id")); err != nil {
+		return nil
+	}
+	return defaultScionClient.CleanGrove(root)
+}
+
+// ProjectAgents is a down-only resource: agents are spawned via
+// `darken spawn`, not by the up lifecycle. Release stops + deletes
+// every agent in the project grove. Best-effort per-agent — one stuck
+// agent shouldn't block teardown of the rest.
+type ProjectAgents struct{}
+
+func (ProjectAgents) Name() string  { return "project agents" }
+func (ProjectAgents) Ensure() error { return nil }
+func (ProjectAgents) Release() error {
+	agents, err := scionListAgents()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "project agents: scion list failed: %v (skipping)\n", err)
+		return nil
+	}
+	if len(agents) == 0 {
+		return nil
+	}
+	fmt.Printf("project agents: stopping %d agent(s) ...\n", len(agents))
+	for _, a := range agents {
+		_ = scionCmd([]string{"stop", a.Name, "-y"}).Run()
+		_ = scionCmd([]string{"delete", a.Name, "-y"}).Run()
+	}
+	return nil
+}
+
+// AgentWorktrees is a down-only resource: git worktrees under
+// .scion/agents/ are created on darken spawn. Release enumerates them
+// via `git worktree list --porcelain`, removes each, and runs
+// `git worktree prune` to clean orphan registry entries. Best-effort —
+// an operator who manually deleted a worktree dir shouldn't block
+// teardown.
+type AgentWorktrees struct{}
+
+func (AgentWorktrees) Name() string  { return "agent worktrees" }
+func (AgentWorktrees) Ensure() error { return nil }
+func (AgentWorktrees) Release() error {
+	paths, err := listAgentWorktreePaths()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "agent worktrees: list failed: %v (skipping)\n", err)
+		return nil
+	}
+	for _, p := range paths {
+		if err := exec.Command("git", "worktree", "remove", "--force", p).Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "agent worktrees: remove %s: %v (continuing)\n", p, err)
+		}
+	}
+	_ = exec.Command("git", "worktree", "prune").Run()
+	return nil
+}
+
+// listAgentWorktreePaths runs `git worktree list --porcelain` and
+// returns paths under .scion/agents/. Returns an empty slice (and nil
+// error) if there are no worktrees registered, which is normal on a
+// project that never spawned an agent.
+func listAgentWorktreePaths() ([]string, error) {
+	out, err := exec.Command("git", "worktree", "list", "--porcelain").Output()
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(line, "worktree ") {
+			continue
+		}
+		path := strings.TrimPrefix(line, "worktree ")
+		if strings.Contains(path, "/.scion/agents/") {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}

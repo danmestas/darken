@@ -39,20 +39,21 @@ func runDown(args []string) error {
 		}
 	}
 
-	steps := []func() error{
-		stopProjectAgents,
-		withdrawBroker,
-		deleteProjectGrove,
-		uninstallInitFiles,
-	}
+	// Lifecycle resources (broker withdraw, grove clean, agent stop+
+	// delete, worktree prune) are walked in reverse via releaseAll.
+	// uninstallInitFiles, chainBonesDown, and purgeHostState are
+	// darken-specific concerns outside the lifecycle model — they run
+	// as explicit best-effort steps after the resource walk.
+	releaseAll(lifecycle)
+
+	postLifecycle := []func() error{uninstallInitFiles}
 	if !*noBones {
-		steps = append(steps, chainBonesDown)
+		postLifecycle = append(postLifecycle, chainBonesDown)
 	}
 	if *purge {
-		steps = append(steps, purgeHostState)
+		postLifecycle = append(postLifecycle, purgeHostState)
 	}
-
-	for _, step := range steps {
+	for _, step := range postLifecycle {
 		if err := step(); err != nil {
 			fmt.Fprintf(os.Stderr, "darken down: step failed: %v (continuing best-effort)\n", err)
 		}
@@ -73,61 +74,6 @@ func confirmDown() (bool, error) {
 	line, _ := r.ReadString('\n')
 	line = strings.ToLower(strings.TrimSpace(line))
 	return line == "y" || line == "yes", nil
-}
-
-// stopProjectAgents stops any agents in this project's grove. Best-effort:
-// if scion list fails the step returns nil so other teardown can proceed.
-func stopProjectAgents() error {
-	agents, err := scionListAgents()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "darken down: skipping agent-stop (scion list failed: %v)\n", err)
-		return nil
-	}
-	if len(agents) == 0 {
-		return nil
-	}
-	fmt.Printf("darken down: stopping %d agent(s) in this grove ...\n", len(agents))
-	for _, a := range agents {
-		_ = scionCmd([]string{"stop", a.Name, "-y"}).Run()
-		_ = scionCmd([]string{"delete", a.Name, "-y"}).Run()
-	}
-	return nil
-}
-
-// withdrawBroker removes the local broker as a provider for the project
-// grove. Symmetric counterpart to the BrokerProvide call in `darken up`
-// step [4/8]. Best-effort: a failure here (broker never provided, hub
-// unreachable) shouldn't abort teardown, so the underlying error is
-// logged and swallowed rather than returned.
-func withdrawBroker() error {
-	root, err := repoRoot()
-	if err != nil {
-		return nil
-	}
-	if _, err := os.Stat(root + "/.scion/grove-id"); err != nil {
-		return nil
-	}
-	fmt.Println("darken down: withdrawing broker from grove ...")
-	if err := defaultScionClient.BrokerWithdraw(); err != nil {
-		fmt.Fprintf(os.Stderr, "darken down: broker withdraw skipped: %v\n", err)
-	}
-	return nil
-}
-
-// deleteProjectGrove removes the project's .scion/ directory and unlinks
-// it from the Hub via `scion clean`. Routes through the ScionClient
-// interface so env propagation and stderr handling stay consistent with
-// the rest of the surface. Best-effort: missing grove-id is a no-op.
-func deleteProjectGrove() error {
-	root, err := repoRoot()
-	if err != nil {
-		return nil
-	}
-	if _, err := os.Stat(root + "/.scion/grove-id"); err != nil {
-		return nil
-	}
-	fmt.Println("darken down: deleting project grove ...")
-	return defaultScionClient.CleanGrove(root)
 }
 
 // uninstallInitFiles delegates to runUninstallInit with --yes so the
