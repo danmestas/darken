@@ -8,10 +8,7 @@ model: claude-opus-4-7[1m]
 max_turns: 50
 max_duration: "2h"
 detached: false
-skills:
-  - danmestas/agent-skills/skills/hipp
-  - danmestas/agent-skills/skills/ousterhout
-  - danmestas/agent-skills/skills/superpowers
+default_mode: planner-t3
 volumes:
   - source: ./.scion/skills-staging/planner-t3/
     target: /home/scion/skills/role/

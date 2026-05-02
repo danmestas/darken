@@ -8,8 +8,7 @@ model: claude-sonnet-4-6
 max_turns: 15
 max_duration: "30m"
 detached: false
-skills:
-  - danmestas/agent-skills/skills/hipp
+default_mode: planner-t1
 volumes:
   - source: ./.scion/skills-staging/planner-t1/
     target: /home/scion/skills/role/

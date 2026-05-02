@@ -1,0 +1,3 @@
+description: "Default skills for the darwin harness."
+skills:
+  - dx-audit

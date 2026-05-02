@@ -1,0 +1,4 @@
+description: "Default skills for the sme harness."
+skills:
+  - ousterhout
+  - hipp

@@ -8,5 +8,6 @@ model: claude-haiku-4-5-20251001
 max_turns: 100
 max_duration: "8h"
 detached: true
+default_mode: admin
 hub:
   endpoint: ${DARKEN_HUB_ENDPOINT}

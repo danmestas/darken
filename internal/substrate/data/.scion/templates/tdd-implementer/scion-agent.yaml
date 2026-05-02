@@ -8,9 +8,7 @@ model: claude-sonnet-4-6[1m]
 max_turns: 100
 max_duration: "2h"
 detached: false
-skills:
-  - danmestas/agent-skills/skills/idiomatic-go
-  - danmestas/agent-skills/skills/tigerstyle
+default_mode: tdd-implementer
 volumes:
   - source: ./.scion/skills-staging/tdd-implementer/
     target: /home/scion/skills/role/

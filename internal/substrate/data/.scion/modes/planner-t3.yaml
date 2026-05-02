@@ -1,0 +1,4 @@
+description: "Default skills for the planner-t3 harness."
+extends: philosophy-base
+skills:
+  - superpowers

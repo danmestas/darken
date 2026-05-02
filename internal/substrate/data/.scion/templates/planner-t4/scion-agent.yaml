@@ -8,10 +8,7 @@ model: gpt-5.5
 max_turns: 100
 max_duration: "4h"
 detached: false
-skills:
-  - danmestas/agent-skills/skills/hipp
-  - danmestas/agent-skills/skills/ousterhout
-  - danmestas/agent-skills/skills/spec-kit
+default_mode: planner-t4
 volumes:
   - source: ./.scion/skills-staging/planner-t4/
     target: /home/scion/skills/role/

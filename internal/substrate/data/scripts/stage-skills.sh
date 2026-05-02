@@ -61,6 +61,19 @@ if [[ ! -d "${MANIFEST_DIR}" ]]; then
   exit 1
 fi
 
+# Resolve the modes dir. Bootstrap's extractEmbeddedTemplates extracts
+# the substrate as <tmp>/templates/ and <tmp>/modes/ side-by-side and
+# exports DARKEN_MODES_DIR; if that's set, prefer it. Otherwise infer
+# from DARKEN_TEMPLATES_DIR's sibling dir; otherwise fall back to the
+# repo-root layout (${REPO}/.scion/modes).
+if [[ -n "${DARKEN_MODES_DIR:-}" ]]; then
+  MODES_DIR="${DARKEN_MODES_DIR}"
+elif [[ -n "${DARKEN_TEMPLATES_DIR:-}" ]]; then
+  MODES_DIR="$(dirname "${DARKEN_TEMPLATES_DIR}")/modes"
+else
+  MODES_DIR="${REPO}/.scion/modes"
+fi
+
 STAGE_DIR="${REPO}/.scion/skills-staging/${HARNESS}"
 
 resolve_ref() {
@@ -80,37 +93,122 @@ resolve_ref() {
 }
 
 read_skills_from_manifest() {
+  # Resolution path is now: manifest -> default_mode -> .scion/modes/<mode>.yaml
+  # with full extends-chain expansion and dedup-first-wins. Mirrors the Go
+  # implementation in internal/substrate/modes.go.
+  #
+  # Output: skill names, one per line on stdout.
+  # Errors: stderr + exit 1.
   local manifest="${MANIFEST_DIR}/scion-agent.yaml"
   if [[ ! -f "${manifest}" ]]; then
     echo "stage-skills: manifest not found at ${manifest}" >&2
     return 1
   fi
-  # Use python3 to parse YAML (available on macOS without extra deps).
-  # Falls back gracefully if skills key is absent.
-  python3 - "${manifest}" <<'PYEOF'
-import sys, json
+  if [[ ! -d "${MODES_DIR}" ]]; then
+    echo "stage-skills: modes dir not found at ${MODES_DIR}" >&2
+    return 1
+  fi
+  python3 - "${manifest}" "${MODES_DIR}" "${HARNESS}" <<'PYEOF'
+import os
+import re
+import sys
+
+manifest_path = sys.argv[1]
+modes_dir = sys.argv[2]
+harness = sys.argv[3]
+
 try:
     import yaml
-    with open(sys.argv[1]) as f:
-        data = yaml.safe_load(f)
-    skills = data.get('skills') or []
-    for s in skills:
-        print(s)
+    HAVE_YAML = True
 except ImportError:
-    # No PyYAML — fall back to grep-based extraction
-    import re
-    in_skills = False
-    with open(sys.argv[1]) as f:
-        for line in f:
-            if re.match(r'^skills\s*:', line):
-                in_skills = True
+    HAVE_YAML = False
+
+
+def load_yaml(path):
+    if HAVE_YAML:
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    # Minimal fallback parser: handles `key: value`, `key:` followed by
+    # `  - item` lines, and quoted scalar values. Sufficient for mode
+    # files and the manifest's default_mode lookup.
+    data = {}
+    cur_list_key = None
+    with open(path) as f:
+        for raw in f:
+            line = raw.rstrip("\n")
+            if not line.strip() or line.lstrip().startswith("#"):
                 continue
-            if in_skills:
-                m = re.match(r'^\s+-\s+(.+)', line)
-                if m:
-                    print(m.group(1).strip())
-                elif re.match(r'^\S', line):
-                    break
+            if line.startswith(" ") or line.startswith("\t"):
+                m = re.match(r"\s+-\s+(.+)$", line)
+                if m and cur_list_key is not None:
+                    val = m.group(1).strip().strip('"').strip("'")
+                    data.setdefault(cur_list_key, []).append(val)
+                continue
+            cur_list_key = None
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$", line)
+            if not m:
+                continue
+            key, val = m.group(1), m.group(2).strip()
+            if val == "":
+                cur_list_key = key
+                data.setdefault(key, [])
+            elif val == "[]":
+                data[key] = []
+            else:
+                data[key] = val.strip('"').strip("'")
+    return data
+
+
+def resolve(name, visited=None, stack=None):
+    if visited is None:
+        visited = set()
+    if stack is None:
+        stack = []
+    if name in visited:
+        chain = " -> ".join(stack + [name])
+        raise RuntimeError(f"cycle detected in extends chain: {chain}")
+    visited.add(name)
+    stack = stack + [name]
+    path = os.path.join(modes_dir, f"{name}.yaml")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"mode {name!r} not found at {path}")
+    m = load_yaml(path)
+    skills = []
+    parent = m.get("extends")
+    if parent:
+        skills.extend(resolve(parent, visited, stack))
+    own = m.get("skills") or []
+    if isinstance(own, str):
+        own = [own]
+    skills.extend(own)
+    seen = set()
+    out = []
+    for s in skills:
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out
+
+
+try:
+    override = os.environ.get("DARKEN_MODE_OVERRIDE")
+    if override:
+        mode = override
+    else:
+        manifest = load_yaml(manifest_path)
+        mode = manifest.get("default_mode")
+    if not mode:
+        print(
+            f"stage-skills: no default_mode declared for {harness}",
+            file=sys.stderr,
+        )
+        sys.exit(0)
+    for s in resolve(mode):
+        print(s)
+except Exception as exc:
+    print(f"stage-skills: {exc}", file=sys.stderr)
+    sys.exit(1)
 PYEOF
 }
 

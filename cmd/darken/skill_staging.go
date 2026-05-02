@@ -139,37 +139,18 @@ func loadManifestForRole(harnessType string) (HarnessManifest, error) {
 	return loadHarnessManifest(body)
 }
 
-// stageSkillsForRole is the single entry point for skill staging called by
-// spawn. It resolves the templates directory (project-local or embedded),
-// the canonical skills source, and the output staging directory, then
-// delegates to buildSkillsStaging which handles the full pipeline:
-// manifest read → ref resolution → copy → role-visibility filter.
+// stageSkillsForRole is the single entry point for skill staging called
+// by spawn. After the modes migration (.scion/modes/<name>.yaml), skill
+// resolution is mode-driven: the manifest carries default_mode, and the
+// shell script resolves through the modes tree with extends-chain
+// expansion. The Go-path buildSkillsStaging reads inline manifest.Skills
+// only — empty after migration — so it produces empty staging dirs.
 //
-// Falls back to the substrate shell script when the templates directory
-// or canonical skills directory cannot be resolved, preserving the
-// pre-REVIEW-7 behavior for operators without a local agent-config tree.
+// Until buildSkillsStaging gains mode-awareness, route through the shell
+// script unconditionally. The script handles both the override case
+// (DARKEN_MODE_OVERRIDE) and the default-mode case correctly.
 func stageSkillsForRole(harnessType string) error {
-	root, rootErr := repoRoot()
-	if rootErr != nil {
-		// No repo root: fall back to shell script.
-		return stageSkillsViaScript(harnessType)
-	}
-
-	templatesDir, cleanup, err := resolveTemplatesDir()
-	if err != nil {
-		return stageSkillsViaScript(harnessType)
-	}
-	defer cleanup()
-
-	canonical := skillsCanonical()
-	if _, err := os.Stat(canonical); err != nil {
-		// Canonical skills dir not present locally: fall back to shell script
-		// so operators without an agent-config checkout can still spawn.
-		return stageSkillsViaScript(harnessType)
-	}
-
-	stageDir := filepath.Join(root, ".scion", "skills-staging", harnessType)
-	return buildSkillsStaging(harnessType, templatesDir, stageDir, canonical)
+	return stageSkillsViaScript(harnessType)
 }
 
 // stageSkillsViaScript is the shell-script fallback for stageSkillsForRole.

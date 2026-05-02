@@ -8,9 +8,7 @@ model: gpt-5.5
 max_turns: 10
 max_duration: "15m"
 detached: false
-skills:
-  - danmestas/agent-skills/skills/ousterhout
-  - danmestas/agent-skills/skills/hipp
+default_mode: sme
 volumes:
   - source: ./.scion/skills-staging/sme/
     target: /home/scion/skills/role/
