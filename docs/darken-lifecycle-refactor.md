@@ -16,39 +16,66 @@ The unifying observation: **darken is a thin orchestration layer that doesn't mo
 
 ## Target shape
 
-### 1. `Step` abstraction with paired up/down
+### 1. `Resource` interface — model the things, not the steps
 
-Replace `[]func() error` in both `runBootstrap` and `runDown` with a single declared list of steps that own both directions:
+Replace `[]func() error` (and the planned `Step` struct) with a small interface representing each piece of state darken manages:
 
 ```go
-type Step struct {
-    Name     string
-    Up       func() error // forward (darken up)
-    Down     func() error // reverse (darken down); nil = no-op
-    Critical bool         // hard-fail vs best-effort
-}
-
-var lifecycle = []Step{
-    {Name: "docker daemon reachable",
-     Up: checkDocker, Down: nil, Critical: true},
-    {Name: "scion CLI present",
-     Up: checkScion, Down: nil, Critical: true},
-    {Name: "scion server running",
-     Up: ensureScionServer, Down: nil /* leave running */, Critical: true},
-    {Name: "broker provided to grove",
-     Up: ensureBrokerProvide, Down: withdrawBrokerInline, Critical: false},
-    {Name: "darken images built",
-     Up: ensureImages, Down: nil /* keep images */, Critical: true},
-    {Name: "hub secrets pushed",
-     Up: ensureHubSecrets, Down: nil, Critical: true},
-    {Name: "templates staged + imported",
-     Up: ensureAllSkillsStaged, Down: deleteProjectGrove, Critical: true},
-    {Name: "final doctor",
-     Up: finalDoctor, Down: nil, Critical: false},
+type Resource interface {
+    Name() string
+    Ensure() error  // idempotent: bring this resource to ready state
+    Release() error // idempotent: bring this resource to clean state
 }
 ```
 
-`runBootstrap` walks forward calling `step.Up`. `runDown` walks reverse calling `step.Down` where non-nil. The asymmetry that produced #45 literally cannot recur — every step ships with its own teardown, and the reviewer can read up/down side-by-side in one place.
+Each managed thing — broker registration, scion server, hub secrets, agent worktrees, substrate — becomes a struct implementing this interface. **Both lifecycle directions are interface methods**, so the bug class from #45 (forgot the symmetric pair) becomes a *compile error* rather than a runtime gap. You cannot add a resource without writing both directions.
+
+```go
+type GroveBroker struct{}
+func (GroveBroker) Name() string    { return "broker provided to grove" }
+func (GroveBroker) Ensure() error   { return defaultScionClient.BrokerProvide() }
+func (GroveBroker) Release() error  { return defaultScionClient.BrokerWithdraw() }
+
+type ScionServer struct{}
+func (ScionServer) Name() string    { return "scion server running" }
+func (ScionServer) Ensure() error {
+    if _, err := defaultScionClient.ServerStatus(); err == nil {
+        return nil // already running; no-op
+    }
+    return scionCmdWithEnv([]string{"server", "start"}).Run()
+}
+func (ScionServer) Release() error  { return nil /* leave running between projects */ }
+```
+
+For down-only concerns (stop agents, clean worktrees), `Ensure()` is a no-op and `Release()` does the work. The interface stays uniform; the code is honest about what each resource actually does:
+
+```go
+type ProjectAgents struct{}
+func (ProjectAgents) Name() string   { return "project agents" }
+func (ProjectAgents) Ensure() error  { return nil /* spawned via darken spawn, not up */ }
+func (ProjectAgents) Release() error { return stopAndDeleteAllAgentsInGrove() }
+```
+
+The lifecycle is then a single declared slice of `Resource`:
+
+```go
+var lifecycle = []Resource{
+    DockerDaemon{},   // up: check reachable;     down: no-op
+    ScionCLI{},       // up: check on PATH;       down: no-op
+    ScionServer{},    // up: start if not;         down: no-op (leave running)
+    GroveBroker{},    // up: provide;              down: withdraw
+    DarkenImages{},   // up: make per-backend;     down: no-op (keep cache)
+    HubSecrets{},     // up: stage from $HOME;     down: no-op
+    Substrate{},      // up: stage skills+import;  down: no-op (clean covers it)
+    ProjectAgents{},  // up: no-op;                down: stop + delete each
+    AgentWorktrees{}, // up: no-op;                down: git worktree remove + prune
+    Grove{},          // up: ensure registered;    down: scion clean
+}
+```
+
+`Up()` walks forward calling `Ensure()`. `Down()` walks reverse calling `Release()`. Each resource implementation is a *deep module* — caller sees three methods; implementation hides scion-command choice, idempotency check, error wrapping, and any per-resource state.
+
+Why this is deeper than a `Step` struct of function pointers: a Step is a tuple — depth still lives in the closures. A Resource is a noun the system manages. Each implementation can carry its own state (e.g. `DarkenImages{Backends: []string{"claude","codex","pi","gemini"}}`) without leaking it through the interface.
 
 ### 2. Route every scion call through `ScionClient`
 
@@ -95,34 +122,59 @@ Three caller patterns:
 - `runScionCmd(cmd, "no importable agent definitions")` — suppress one known mode
 - Methods that need a friendly error wrap their own message after the helper returns
 
-### 4. Agent worktree cleanup
+### 4. Agent worktree cleanup as a Resource
 
 `darken spawn` creates real git worktrees at `.scion/agents/<name>/workspace` (see the `agent-worktree-discipline` skill). `darken down` currently calls `scion stop` and `scion delete` per agent in `stopProjectAgents`, then `scion clean` removes the entire `.scion/` directory. That deletes the *files* under each worktree but leaves the parent repo's worktree registry pointing at directories that no longer exist — a future `git worktree list` will show orphans, and `git worktree prune` won't run unless something invokes it.
 
-The lifecycle should explicitly own this. Two changes:
-
-- A new teardown-only step that walks `git worktree list --porcelain`, filters to anything under `.scion/agents/`, and calls `git worktree remove --force <path>` for each before `deleteProjectGrove` runs. After the loop, `git worktree prune` for safety.
-- The `Step` struct supports teardown-only steps (`Up` is nil-able), so this slots into the same list as everything else:
+In the Resource model this is just one more entry in `lifecycle`:
 
 ```go
-{Name: "stop project agents",
- Up: nil, Down: stopProjectAgents,    Critical: false},
-{Name: "clean agent worktrees",
- Up: nil, Down: cleanAgentWorktrees,  Critical: false},
+type AgentWorktrees struct{}
+func (AgentWorktrees) Name() string  { return "agent worktrees" }
+func (AgentWorktrees) Ensure() error { return nil /* spawn manages creation */ }
+func (AgentWorktrees) Release() error {
+    paths, err := listWorktreesUnder(".scion/agents/")
+    if err != nil { return err }
+    for _, p := range paths {
+        _ = exec.Command("git", "worktree", "remove", "--force", p).Run()
+    }
+    return exec.Command("git", "worktree", "prune").Run()
+}
 ```
 
-These run in reverse order on `darken down` and are skipped on `darken up`. Keeps the model uniform.
+Best-effort by design: an operator who manually `rm -rf`'d a worktree dir shouldn't be blocked from teardown by a stale registry entry. The walker logs and continues.
 
-Open question: should worktree cleanup be best-effort (log + continue) or hard-fail? Probably best-effort — an operator who manually `rm -rf`'d a worktree dir shouldn't be blocked from teardown by a stale registry entry.
+### 5. Bash scripts disappear *into* resources
 
-### 5. Replace bash scripts with native Go
+`scripts/stage-creds.sh` and `scripts/stage-skills.sh` are subprocess-of-subprocess layers (darken → bash → scion). With the Resource pattern there's no separate "port the bash" phase — they just become the body of the relevant `Ensure()`:
 
-`scripts/stage-creds.sh` and `scripts/stage-skills.sh` are subprocess-of-subprocess layers (darken → bash → scion). Both do work that's clearly Go-shaped:
+- **`stage-creds.sh`** → `HubSecrets.Ensure()`. Walk known credential files in `$HOME`, call `defaultScionClient.PushSecret(name, path)` for each. ~30 lines of Go.
+- **`stage-skills.sh`** → folded into `Substrate.Ensure()`. Walk role manifests, resolve modes, copy skill bundles into per-role staging dirs, then call `defaultScionClient.ImportAllTemplates(root)`. ~80 lines of Go (some already exists in `internal/staging/`; the bash wrapper becomes redundant).
 
-- **`stage-creds.sh`** — reads `~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.gemini/oauth_creds.json`, calls `scion hub secret push <name> --from-file <path>`. ~50 lines of Go in `internal/staging/creds.go`.
-- **`stage-skills.sh`** — copies skill bundles from `.scion/skills-staging/` into per-role directories. ~80 lines of Go in `internal/staging/skills.go` (some of this already exists; the bash wrapper is now redundant).
+This collapses two subprocess hops into in-process Go calls, gives us proper error handling, and removes ~200 lines of bash that's hard to test. The `runSubstrateScript` machinery and the embed.FS bash bodies can be deleted entirely.
 
-This collapses two subprocess hops into in-process Go calls, gives us proper error handling, and removes ~200 lines of bash that's hard to test.
+### 6. `darken doctor` becomes a third traversal
+
+The Resource list models the world. Three commands are three traversals of the same list:
+
+| Command | Traversal | Per-resource action |
+|---|---|---|
+| `darken up`     | forward  | `Ensure()` |
+| `darken down`   | reverse  | `Release()` |
+| `darken doctor` | forward  | `Observe()` (read-only state report) |
+
+For `Observe()` to work without bloating the interface, extend `Resource` with one optional method via an embedded type-assertion check:
+
+```go
+type Observer interface {
+    Resource
+    Observe() (status, detail string)  // pretty-printable state
+}
+```
+
+Resources that can cheaply report state implement `Observer`; ones that can't are reported as "(no observer)" in doctor output. This is opt-in — no impact on the core 3-method `Resource` interface.
+
+The win: `darken doctor`, `darken up`, and `darken down` become three views of the same world model. Adding a new resource means it shows up in all three commands automatically. The current code has separate per-command logic that drifts.
 
 ## Migration path
 
@@ -130,23 +182,26 @@ Each phase below is an independent, shippable PR. They do not need to land in th
 
 | # | PR | Scope |
 |---|---|---|
-| A | Introduce `Step` abstraction; migrate `runBootstrap` | Pure refactor of `bootstrap.go`. No behavior change. New tests verify forward order matches existing tests. |
-| B | Migrate `runDown` to use the same step list | Folds the down-side logic into `lifecycle`. The asymmetry guard becomes "if you add a step, you write its `Down` field at the same time." |
-| C | Extract `runScionCmd` helper; route all ScionClient methods through it | Removes duplicated stderr-buffering. Each method gains its own `knownNoisy` list. |
-| D | Add `StopAgent`, `DeleteAgent`, `ServerStop`, `DeleteTemplate` to ScionClient; route `down.go`'s remaining raw `exec.Command` paths | Closes the "everything goes through the interface" invariant. |
-| E | Add `cleanAgentWorktrees` step to the lifecycle | New teardown-only step. `git worktree list --porcelain` → filter to `.scion/agents/` → `worktree remove --force` per entry → `worktree prune`. Best-effort; log + continue on stale entries. |
-| F | Port `stage-creds.sh` to `internal/staging/creds.go` | Behavior-preserving rewrite. Delete the bash file at the end. |
-| G | Port `stage-skills.sh` to `internal/staging/skills.go` | Same. |
+| A | Define `Resource` interface + `Up()`/`Down()` walkers; port two simplest resources (`DockerDaemon`, `ScionCLI`) | Establishes the pattern, validates the migration ergonomics. New tests target each resource in isolation. |
+| B | Port up-side resources: `ScionServer`, `GroveBroker`, `DarkenImages`, `HubSecrets`, `Substrate` | Bulk of the work. Each lives in `internal/resources/<name>.go`. `runBootstrap` shrinks to a 5-line walker. |
+| C | Port down-only resources: `ProjectAgents`, `AgentWorktrees`, `Grove` | These have no-op `Ensure()`. `runDown` shrinks to a 5-line reverse walker. The forgotten-pair bug class is now structurally impossible. |
+| D | Extract `runScionCmd` helper; route all `ScionClient` methods through it | Removes duplicated stderr-buffering. Each method declares its own `knownNoisy` list. |
+| E | Add `StopAgent`, `DeleteAgent`, `ServerStop`, `DeleteTemplate`, `PushSecret` to `ScionClient`; convert remaining raw `exec.Command` paths | Closes the "everything goes through the interface" invariant. Resources route exclusively through the interface. |
+| F | Delete `stage-creds.sh` (folded into `HubSecrets.Ensure`) | Remove subprocess hop. Delete bash file + embed.FS plumbing for it. |
+| G | Delete `stage-skills.sh` (folded into `Substrate.Ensure`) | Same. |
+| H | Add `Observer` interface; refactor `darken doctor` to walk the same `[]Resource` | Three commands, one world model. Adding a new resource makes it visible to doctor automatically. |
 
-After G: `scripts/` directory is empty (or close to it), and the embed.FS no longer needs to ship bash bodies.
+After H: `scripts/` directory is empty (or close to it), the embed.FS no longer ships bash, and `darken up`/`darken down`/`darken doctor` are three traversals of `lifecycle`.
 
-Estimated total: ~5–6 PRs spread over a week of focused work. Each PR is small enough to review in one sitting (~200–400 LOC including tests).
+Estimated total: ~6–8 PRs over a week of focused work. Each PR is small enough to review in one sitting (~200–400 LOC including tests). Phases A–C are the structural change; D–H are cleanup that compounds on it.
 
 ## What we're deliberately NOT doing
 
-- **Declarative YAML manifest for the lifecycle.** Considered. With 8 steps the structure cost outweighs the configurability benefit, and the `Step` struct already gives us 80% of the readability win.
-- **Terraform-style reconciliation engine** (desired-state ↔ actual-state diff loop). Wrong abstraction for a CLI that runs once and exits. Right answer for a daemon, but darken isn't one.
-- **Plugin system / hooks** so operators can inject steps. Premature — no operator has asked for this. Add when there's a second project that needs different lifecycle behavior.
+- **Declarative YAML manifest for the lifecycle.** Considered. With ~10 resources the structure cost outweighs the configurability benefit, and the `Resource` interface already gives us symmetry-by-construction in plain Go.
+- **A `Step` struct of paired function pointers** (the first-draft of this doc). Considered and rejected: a tuple is shallower than an interface. `Step{Up: f, Down: nil}` compiles fine, leaving the asymmetry-bug class prevented only by convention. The Resource interface makes "forgot the down side" a type error.
+- **Terraform-style reconciliation engine** (desired-state ↔ actual-state diff loop). Wrong abstraction for a CLI that runs once and exits. Right answer for a daemon, but darken isn't one. The Resource pattern gets most of reconciliation's clarity (idempotent Ensure/Release) without the planning machinery.
+- **Plugin system / hooks** so operators can inject resources. Premature — no operator has asked for this. Add when there's a second project that needs different lifecycle behavior.
+- **`Resource.DependsOn() []Resource`** for explicit DAG ordering. Premature — slice order encodes the topology fine for ~10 resources. Add if the list grows past ~20 or if resources start being conditionally enabled.
 - **Replacing bones.** Bones is a parallel layer (cross-machine coordination), not scion-replaceable, not darken-replaceable. Stays as-is.
 - **Replacing scion.** Out of scope by definition — scion is upstream at Google.
 - **Building a `darken compose` (docker-compose-style) interface.** Considered. Bones is its own daemon, not a docker service; scion sometimes runs containerized but historically doesn't. Compose would fight the existing layering.
@@ -183,5 +238,7 @@ If you do file these upstream: file 4 first. It's a one-line change in scion tha
 
 ## Open questions
 
-- Should `lifecycle` be a package-level `var` or a function that returns the list? Function lets us inject test doubles; var is simpler. Lean: var, with a test-only helper that overrides individual steps.
-- Should `Step.Critical = false` steps log to stderr on failure (current behavior) or be silent? Today `darken down`'s loop logs "step failed: <err> (continuing best-effort)" for every soft-fail. That's noisy when nothing is actually wrong (e.g. `withdrawBroker` when broker was never provided). Probably worth a `Step.SuppressErrorLog` flag, decided per step.
+- Should `lifecycle` be a package-level `var` or a function that returns the list? Function lets us inject test doubles; var is simpler. Lean: var, with a test-only helper that overrides individual entries by type.
+- Where do "criticality" and "soft-fail logging" live? In the `Step` draft these were struct fields. With `Resource` they belong inside the implementation: a resource decides for itself whether `Ensure()` returning an error should abort up, and whether `Release()` failures should log. The walker just propagates errors; the resource decides what to return. This pulls a bit more complexity into each resource but removes a config field from the interface.
+- Should `Resource.Ensure()` always be safe to call (no-op when already ready), or should we add a separate `Status() State` method and let the walker decide? Lean: keep `Ensure()` self-idempotent. The walker stays trivial. Doctor uses `Observer` for read-only state.
+- Naming: `Ensure`/`Release` vs `Up`/`Down` vs `Acquire`/`Release` vs `Start`/`Stop`. Picked `Ensure`/`Release` because (a) `Up`/`Down` collides with `Project.Up()`/`Project.Down()` walkers, (b) `Acquire` implies locking, (c) `Start`/`Stop` implies a process. `Ensure`/`Release` are direction-symmetric and idempotent-flavored.
