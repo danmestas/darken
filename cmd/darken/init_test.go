@@ -333,6 +333,130 @@ func TestInit_BonesAlreadyInitializedIsNoOp(t *testing.T) {
 	}
 }
 
+// TestParseBonesVersion covers the formats parseBonesVersion is expected to
+// handle, including the exact `bones --version` output and a few corruptions.
+func TestParseBonesVersion(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"canonical", "bones 0.6.2 (commit a6c35ab, built 2026-05-01T20:32:45Z)\n", "0.6.2"},
+		{"trimmed", "bones 0.6.1\n", "0.6.1"},
+		{"leading space", "  bones 1.0.0\n", "1.0.0"},
+		{"empty", "", ""},
+		{"wrong tool", "barnacle 9.9.9\n", ""},
+		{"no version", "bones\n", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseBonesVersion(tc.in); got != tc.want {
+				t.Fatalf("parseBonesVersion(%q): want %q, got %q", tc.in, tc.want, got)
+			}
+		})
+	}
+}
+
+// TestSemverLess covers the dotted version comparator.
+func TestSemverLess(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"0.6.1", "0.6.2", true},
+		{"0.6.2", "0.6.2", false},
+		{"0.6.3", "0.6.2", false},
+		{"0.5.99", "0.6.0", true},
+		{"1.0.0", "0.99.99", false},
+		{"0.6", "0.6.2", true},   // missing patch component compares as 0
+		{"0.6.2", "0.6", false},  // symmetric
+		{"abc", "0.6.2", true},   // non-numeric -> 0
+		{"0.6.2", "abc", false},  // non-numeric -> 0
+	}
+	for _, tc := range cases {
+		t.Run(tc.a+"_vs_"+tc.b, func(t *testing.T) {
+			if got := semverLess(tc.a, tc.b); got != tc.want {
+				t.Fatalf("semverLess(%q,%q): want %v, got %v", tc.a, tc.b, tc.want, got)
+			}
+		})
+	}
+}
+
+// TestWarnIfBonesOutdated_OldVersion stubs `bones --version` to print a
+// pre-minimum release and verifies the warning is emitted to stderr with the
+// brew upgrade hint.
+func TestWarnIfBonesOutdated_OldVersion(t *testing.T) {
+	stubDir := t.TempDir()
+	bonesStub := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'bones 0.6.1 (commit deadbeef, built 2026-04-01T00:00:00Z)'; exit 0; fi\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "bones"), []byte(bonesStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	stderr, err := captureStderr(func() error {
+		warnIfBonesOutdated()
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stderr, "warning: bones 0.6.1") {
+		t.Fatalf("expected old-version warning, got: %q", stderr)
+	}
+	if !strings.Contains(stderr, "brew upgrade") {
+		t.Fatalf("warning should suggest brew upgrade, got: %q", stderr)
+	}
+}
+
+// TestWarnIfBonesOutdated_CurrentVersion confirms the warning is silent when
+// bones is at the recommended minimum.
+func TestWarnIfBonesOutdated_CurrentVersion(t *testing.T) {
+	stubDir := t.TempDir()
+	bonesStub := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'bones " + minBonesVersion + " (commit x, built y)'; exit 0; fi\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "bones"), []byte(bonesStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	stderr, _ := captureStderr(func() error { warnIfBonesOutdated(); return nil })
+	if strings.Contains(stderr, "warning: bones") {
+		t.Fatalf("current version should not warn, got: %q", stderr)
+	}
+}
+
+// TestWarnIfBonesOutdated_FutureVersion confirms forward-compat: a newer
+// bones (e.g. 1.0.0) does not produce a warning.
+func TestWarnIfBonesOutdated_FutureVersion(t *testing.T) {
+	stubDir := t.TempDir()
+	bonesStub := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'bones 1.0.0'; exit 0; fi\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "bones"), []byte(bonesStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	stderr, _ := captureStderr(func() error { warnIfBonesOutdated(); return nil })
+	if strings.Contains(stderr, "warning: bones") {
+		t.Fatalf("future version should not warn, got: %q", stderr)
+	}
+}
+
+// TestWarnIfBonesOutdated_UnparseableOutput confirms the warning silently
+// no-ops when bones --version output can't be parsed (defensive: don't panic
+// or print noise on bonesStub failures).
+func TestWarnIfBonesOutdated_UnparseableOutput(t *testing.T) {
+	stubDir := t.TempDir()
+	bonesStub := "#!/bin/sh\necho 'gibberish'\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "bones"), []byte(bonesStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	stderr, _ := captureStderr(func() error { warnIfBonesOutdated(); return nil })
+	if stderr != "" {
+		t.Fatalf("unparseable version should be silent, got: %q", stderr)
+	}
+}
+
 func TestInit_PassesWhenAllPrereqsPresent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)

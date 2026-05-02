@@ -7,8 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
+
+// minBonesVersion is the lowest bones release that omits the legacy ASCII
+// banner from `bones init` output. Older versions still work but produce
+// noisy output during `darken up`. Bumped by hand when bones evolves.
+const minBonesVersion = "0.6.2"
 
 func runInit(args []string) error {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
@@ -203,6 +209,7 @@ func runBonesInit(targetDir string) error {
 	if _, err := exec.LookPath("bones"); err != nil {
 		return nil // soft-fail; bones not on PATH
 	}
+	warnIfBonesOutdated()
 	var stderrBuf strings.Builder
 	c := exec.Command("bones", "init")
 	c.Dir = targetDir
@@ -215,4 +222,56 @@ func runBonesInit(targetDir string) error {
 		return err
 	}
 	return nil
+}
+
+// warnIfBonesOutdated emits a stderr nudge when the installed bones is
+// older than minBonesVersion. Always best-effort — a parse failure or a
+// failed `bones --version` call is silently ignored. The warning names
+// the brew tap because that is the canonical install path.
+func warnIfBonesOutdated() {
+	out, err := exec.Command("bones", "--version").Output()
+	if err != nil {
+		return
+	}
+	ver := parseBonesVersion(string(out))
+	if ver == "" || !semverLess(ver, minBonesVersion) {
+		return
+	}
+	fmt.Fprintf(os.Stderr,
+		"warning: bones %s is older than recommended %s; "+
+			"run `brew upgrade danmestas/tap/bones` for cleaner output\n",
+		ver, minBonesVersion)
+}
+
+// parseBonesVersion extracts the X.Y.Z token from `bones --version`
+// output. Expected format: "bones 0.6.2 (commit ..., built ...)".
+// Returns the empty string on any parse failure so callers can treat
+// "unknown version" as "skip the check".
+func parseBonesVersion(s string) string {
+	fields := strings.Fields(strings.TrimSpace(s))
+	if len(fields) < 2 || fields[0] != "bones" {
+		return ""
+	}
+	return fields[1]
+}
+
+// semverLess reports whether a < b for dotted X.Y.Z version strings.
+// Non-numeric components compare as 0. Intentionally minimal: this is
+// the warn-if-old path, not a release-blocking semver check.
+func semverLess(a, b string) bool {
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
+	for i := range 3 {
+		var ai, bi int
+		if i < len(aParts) {
+			ai, _ = strconv.Atoi(aParts[i])
+		}
+		if i < len(bParts) {
+			bi, _ = strconv.Atoi(bParts[i])
+		}
+		if ai != bi {
+			return ai < bi
+		}
+	}
+	return false
 }

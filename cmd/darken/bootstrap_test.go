@@ -83,6 +83,121 @@ func TestBootstrap_BrokerProvideStep(t *testing.T) {
 	}
 }
 
+// TestResolveSubstrateDirs_FallsBackOnEmptyProjectDir guards against the
+// `darken up` failure mode where a workspace's `.scion/templates/` exists
+// but is empty (e.g. a fresh `darken init` workspace). resolveSubstrateDirs
+// must fall back to the embedded substrate so downstream `scion templates
+// import --all` has role subdirs to read.
+func TestResolveSubstrateDirs_FallsBackOnEmptyProjectDir(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	// Create the templates dir but leave it empty.
+	if err := os.MkdirAll(filepath.Join(root, ".scion", "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	templatesDir, _, cleanup, err := resolveSubstrateDirs()
+	if err != nil {
+		t.Fatalf("resolveSubstrateDirs: %v", err)
+	}
+	defer cleanup()
+
+	// Fallback path lives under os.TempDir(); the project dir does not.
+	if strings.HasPrefix(templatesDir, root) {
+		t.Fatalf("expected fallback to embedded substrate when project dir is empty, got %q", templatesDir)
+	}
+	// Embedded substrate must contain at least one role subdir.
+	if !hasRoleSubdirs(templatesDir) {
+		t.Fatalf("embedded substrate templatesDir has no role subdirs: %s", templatesDir)
+	}
+}
+
+// TestResolveSubstrateDirs_FallsBackOnBaseOnlyProjectDir confirms that a
+// templates dir holding only the shared `base/` skill bundle still triggers
+// the embedded fallback — `base` is not a canonical role.
+func TestResolveSubstrateDirs_FallsBackOnBaseOnlyProjectDir(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	if err := os.MkdirAll(filepath.Join(root, ".scion", "templates", "base"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	templatesDir, _, cleanup, err := resolveSubstrateDirs()
+	if err != nil {
+		t.Fatalf("resolveSubstrateDirs: %v", err)
+	}
+	defer cleanup()
+
+	if strings.HasPrefix(templatesDir, root) {
+		t.Fatalf("base-only project dir should still trigger fallback, got %q", templatesDir)
+	}
+}
+
+// TestResolveSubstrateDirs_UsesProjectDirWithRoleSubdirs is the happy-path
+// regression: a workspace with at least one canonical role uses its own
+// templates dir (no embedded extraction).
+func TestResolveSubstrateDirs_UsesProjectDirWithRoleSubdirs(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", root)
+	roleDir := filepath.Join(root, ".scion", "templates", "researcher")
+	if err := os.MkdirAll(roleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	templatesDir, _, cleanup, err := resolveSubstrateDirs()
+	if err != nil {
+		t.Fatalf("resolveSubstrateDirs: %v", err)
+	}
+	defer cleanup()
+
+	want := filepath.Join(root, ".scion", "templates")
+	if templatesDir != want {
+		t.Fatalf("expected project templatesDir %q, got %q", want, templatesDir)
+	}
+}
+
+// TestHasRoleSubdirs covers the helper directly.
+func TestHasRoleSubdirs(t *testing.T) {
+	cases := []struct {
+		name string
+		mk   func(t *testing.T) string
+		want bool
+	}{
+		{"empty dir", func(t *testing.T) string { return t.TempDir() }, false},
+		{"base only", func(t *testing.T) string {
+			d := t.TempDir()
+			os.MkdirAll(filepath.Join(d, "base"), 0o755)
+			return d
+		}, false},
+		{"role present", func(t *testing.T) string {
+			d := t.TempDir()
+			os.MkdirAll(filepath.Join(d, "researcher"), 0o755)
+			return d
+		}, true},
+		{"role beside base", func(t *testing.T) string {
+			d := t.TempDir()
+			os.MkdirAll(filepath.Join(d, "base"), 0o755)
+			os.MkdirAll(filepath.Join(d, "admin"), 0o755)
+			return d
+		}, true},
+		{"only files, no dirs", func(t *testing.T) string {
+			d := t.TempDir()
+			os.WriteFile(filepath.Join(d, "stray.yaml"), []byte("x"), 0o644)
+			return d
+		}, false},
+		{"missing dir", func(t *testing.T) string {
+			return filepath.Join(t.TempDir(), "does-not-exist")
+		}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasRoleSubdirs(tc.mk(t)); got != tc.want {
+				t.Fatalf("hasRoleSubdirs: want %v, got %v", tc.want, got)
+			}
+		})
+	}
+}
+
 // TestEnsureAllSkillsStaged_ImportsTemplatesForLocalStore asserts that
 // ensureAllSkillsStaged calls ImportAllTemplates with the resolved
 // templatesDir. This is the regression guard for the darken-up
