@@ -239,11 +239,11 @@ func TestSetup_UploadsAllTemplatesToHub(t *testing.T) {
 	}
 
 	// The PATH scion stub logs every scion invocation. Verify that
-	// --global templates push <role> appears for every canonical role.
+	// --global --non-interactive templates push <role> appears for every canonical role.
 	body, _ := os.ReadFile(logPath)
 	log := string(body)
 	for _, role := range canonicalRoles {
-		want := "--global templates push " + role
+		want := "--global --non-interactive templates push " + role
 		if !strings.Contains(log, want) {
 			t.Errorf("expected scion %q to be called; log:\n%s", want, log)
 		}

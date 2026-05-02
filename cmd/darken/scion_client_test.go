@@ -9,18 +9,18 @@ import (
 
 // mockScionClient is a configurable ScionClient for unit tests.
 type mockScionClient struct {
-	serverStatusOut    string
-	serverStatusErr    error
-	secretListOut      string
-	secretListErr      error
-	startAgentErr      error
-	brokerProvideErr   error
-	brokerWithdrawErr  error
-	pushTemplateErr    error
-	groveInitErr       error
-	cleanGroveErr      error
-	lookAgentOut       []byte
-	lookAgentErr       error
+	serverStatusOut   string
+	serverStatusErr   error
+	secretListOut     string
+	secretListErr     error
+	startAgentErr     error
+	brokerProvideErr  error
+	brokerWithdrawErr error
+	pushTemplateErr   error
+	groveInitErr      error
+	cleanGroveErr     error
+	lookAgentOut      []byte
+	lookAgentErr      error
 
 	importAllTemplatesErr   error
 	importAllTemplatesCalls []string
@@ -218,6 +218,52 @@ func TestImportAllTemplates_SurfacesUnknownStderr(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "broker refused") {
 		t.Fatalf("unknown errors should pass through to stderr, got: %q", stderr)
+	}
+}
+
+// TestExecScionClient_PushTemplate_IncludesNonInteractiveFlag asserts that
+// PushTemplate explicitly passes --non-interactive to scion rather than relying
+// on the SCION_NON_INTERACTIVE env var, which triggers a multiple-templates-found
+// error when both global and grove scopes hold the same template name.
+func TestExecScionClient_PushTemplate_IncludesNonInteractiveFlag(t *testing.T) {
+	stubDir := t.TempDir()
+	argsFile := filepath.Join(stubDir, "args.log")
+	stub := "#!/bin/sh\necho \"$@\" >> " + argsFile + "\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	c := &execScionClient{}
+	if err := c.PushTemplate("researcher"); err != nil {
+		t.Fatalf("PushTemplate: %v", err)
+	}
+	body, _ := os.ReadFile(argsFile)
+	if !strings.Contains(string(body), "--non-interactive") {
+		t.Errorf("PushTemplate did not pass --non-interactive to scion; args: %s", body)
+	}
+}
+
+// TestExecScionClient_ImportAllTemplates_IncludesNonInteractiveFlag asserts that
+// ImportAllTemplates explicitly passes --non-interactive to scion rather than relying
+// on the SCION_NON_INTERACTIVE env var, which triggers a multiple-templates-found
+// error when both global and grove scopes hold the same template name.
+func TestExecScionClient_ImportAllTemplates_IncludesNonInteractiveFlag(t *testing.T) {
+	stubDir := t.TempDir()
+	argsFile := filepath.Join(stubDir, "args.log")
+	stub := "#!/bin/sh\necho \"$@\" >> " + argsFile + "\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	c := &execScionClient{}
+	if err := c.ImportAllTemplates(t.TempDir()); err != nil {
+		t.Fatalf("ImportAllTemplates: %v", err)
+	}
+	body, _ := os.ReadFile(argsFile)
+	if !strings.Contains(string(body), "--non-interactive") {
+		t.Errorf("ImportAllTemplates did not pass --non-interactive to scion; args: %s", body)
 	}
 }
 
