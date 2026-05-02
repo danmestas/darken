@@ -32,6 +32,20 @@ type mockScionClient struct {
 	cleanGroveCalls     []string
 	brokerWithdrawCalls int
 	lookAgentCalls      []string
+
+	startServerCalls    int
+	stopServerCalls     int
+	stopAgentCalls      []string
+	deleteAgentCalls    []string
+	deleteTemplateCalls []string
+	pushSecretCalls     [][2]string
+
+	startServerErr    error
+	stopServerErr     error
+	stopAgentErr      error
+	deleteAgentErr    error
+	deleteTemplateErr error
+	pushSecretErr     error
 }
 
 func (m *mockScionClient) ServerStatus() (string, error) {
@@ -71,6 +85,30 @@ func (m *mockScionClient) BrokerWithdraw() error {
 func (m *mockScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {
 	m.lookAgentCalls = append(m.lookAgentCalls, name)
 	return m.lookAgentOut, m.lookAgentErr
+}
+func (m *mockScionClient) StartServer() error {
+	m.startServerCalls++
+	return m.startServerErr
+}
+func (m *mockScionClient) StopServer() error {
+	m.stopServerCalls++
+	return m.stopServerErr
+}
+func (m *mockScionClient) StopAgent(name string) error {
+	m.stopAgentCalls = append(m.stopAgentCalls, name)
+	return m.stopAgentErr
+}
+func (m *mockScionClient) DeleteAgent(name string) error {
+	m.deleteAgentCalls = append(m.deleteAgentCalls, name)
+	return m.deleteAgentErr
+}
+func (m *mockScionClient) DeleteTemplate(role string) error {
+	m.deleteTemplateCalls = append(m.deleteTemplateCalls, role)
+	return m.deleteTemplateErr
+}
+func (m *mockScionClient) PushSecret(name, filePath string) error {
+	m.pushSecretCalls = append(m.pushSecretCalls, [2]string{name, filePath})
+	return m.pushSecretErr
 }
 
 // setDefaultClient replaces defaultScionClient for the duration of the test.

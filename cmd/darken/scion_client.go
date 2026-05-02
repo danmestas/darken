@@ -62,6 +62,33 @@ type ScionClient interface {
 	// LookAgent returns the raw terminal output of `scion look <name>`.
 	// ANSI stripping is the caller's responsibility.
 	LookAgent(name string, extraArgs []string) ([]byte, error)
+
+	// StartServer starts the scion daemon. Idempotency is the caller's
+	// concern — typically gated behind a ServerStatus check.
+	StartServer() error
+
+	// StopServer stops the scion daemon. Used by `darken down --purge`
+	// for cross-project teardown; ordinary `darken down` leaves the
+	// server running.
+	StopServer() error
+
+	// StopAgent stops a running agent by name. Idempotent: stopping an
+	// already-stopped agent is a no-op on scion's side.
+	StopAgent(name string) error
+
+	// DeleteAgent removes an agent registration by name. Should be
+	// preceded by StopAgent so no work is in flight.
+	DeleteAgent(name string) error
+
+	// DeleteTemplate removes a template from scion's user (global) store.
+	// Used by `darken down --purge` to revert template uploads from
+	// uploadAllTemplatesToHub.
+	DeleteTemplate(role string) error
+
+	// PushSecret uploads a credential file to the Hub under the given
+	// secret name. Used by HubSecrets.Ensure once the bash stage-creds.sh
+	// is replaced by native Go (Phase F).
+	PushSecret(name, filePath string) error
 }
 
 // execScionClient is the production ScionClient that delegates to the scion binary.
@@ -165,6 +192,36 @@ func runScionCmd(cmd *exec.Cmd, knownNoisy ...string) (error, bool) {
 		os.Stderr.WriteString(stderr)
 	}
 	return nil, false
+}
+
+func (c *execScionClient) StartServer() error {
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"server", "start"}))
+	return err
+}
+
+func (c *execScionClient) StopServer() error {
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"server", "stop"}))
+	return err
+}
+
+func (c *execScionClient) StopAgent(name string) error {
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"stop", name, "-y"}))
+	return err
+}
+
+func (c *execScionClient) DeleteAgent(name string) error {
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"delete", name, "-y"}))
+	return err
+}
+
+func (c *execScionClient) DeleteTemplate(role string) error {
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"--global", "templates", "delete", role, "-y"}))
+	return err
+}
+
+func (c *execScionClient) PushSecret(name, filePath string) error {
+	err, _ := runScionCmd(scionCmdWithEnv([]string{"hub", "secret", "push", name, "--from-file", filePath}))
+	return err
 }
 
 func (c *execScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {

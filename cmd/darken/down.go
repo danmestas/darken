@@ -106,11 +106,11 @@ func chainBonesDown() error {
 // teardown doesn't trample shared state.
 func purgeHostState() error {
 	fmt.Println("darken down --purge: stopping scion server ...")
-	if err := scionCmd([]string{"server", "stop"}).Run(); err != nil {
+	if err := defaultScionClient.StopServer(); err != nil {
 		fmt.Fprintf(os.Stderr, "darken down: scion server stop failed: %v\n", err)
 	}
 	for _, role := range canonicalRoles {
-		_ = scionCmd([]string{"--global", "templates", "delete", role, "-y"}).Run()
+		_ = defaultScionClient.DeleteTemplate(role)
 	}
 	return nil
 }

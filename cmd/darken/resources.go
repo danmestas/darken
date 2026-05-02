@@ -130,10 +130,7 @@ func (ScionServer) Ensure() error {
 	if _, err := defaultScionClient.ServerStatus(); err == nil {
 		return nil
 	}
-	cmd := scionCmdWithEnv([]string{"server", "start"})
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return defaultScionClient.StartServer()
 }
 func (ScionServer) Release() error { return nil }
 
@@ -262,8 +259,8 @@ func (ProjectAgents) Release() error {
 	}
 	fmt.Printf("project agents: stopping %d agent(s) ...\n", len(agents))
 	for _, a := range agents {
-		_ = scionCmd([]string{"stop", a.Name, "-y"}).Run()
-		_ = scionCmd([]string{"delete", a.Name, "-y"}).Run()
+		_ = defaultScionClient.StopAgent(a.Name)
+		_ = defaultScionClient.DeleteAgent(a.Name)
 	}
 	return nil
 }
