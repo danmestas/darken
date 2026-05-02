@@ -43,10 +43,16 @@ type Resource interface {
 // lifecycle is the canonical, ordered list of resources darken manages.
 // The slice order encodes the topology: each resource may depend on
 // resources earlier in the slice. `darken up` walks forward; `darken
-// down` walks reverse. Phases B–C grow this list to ~10 entries.
+// down` walks reverse. Phase C adds Grove + ProjectAgents +
+// AgentWorktrees to bring this to ~10 entries.
 var lifecycle = []Resource{
 	DockerDaemon{},
 	ScionCLI{},
+	ScionServer{},
+	GroveBroker{},
+	DarkenImages{},
+	HubSecrets{},
+	Substrate{},
 }
 
 // ensureAll walks resources forward calling Ensure(). The first error
@@ -106,3 +112,101 @@ func (ScionCLI) Ensure() error {
 	return nil
 }
 func (ScionCLI) Release() error { return nil }
+
+// ScionServer ensures the scion daemon is running. Idempotent: if status
+// reports OK, Ensure is a no-op. Release is a no-op — leaving the server
+// running between projects is the right default; --purge handles the
+// cross-project case explicitly.
+type ScionServer struct{}
+
+func (ScionServer) Name() string { return "scion server running" }
+func (ScionServer) Ensure() error {
+	if _, err := defaultScionClient.ServerStatus(); err == nil {
+		return nil
+	}
+	cmd := scionCmdWithEnv([]string{"server", "start"})
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+func (ScionServer) Release() error { return nil }
+
+// GroveBroker registers the local broker as a provider for the project
+// grove (Ensure) or removes that registration (Release). This is the
+// canonical example of the symmetric pair the Resource interface
+// enforces — bug class #45 (forgotten BrokerWithdraw) is structurally
+// impossible because both methods are required.
+type GroveBroker struct{}
+
+func (GroveBroker) Name() string    { return "broker provided to grove" }
+func (GroveBroker) Ensure() error   { return defaultScionClient.BrokerProvide() }
+func (GroveBroker) Release() error  { return defaultScionClient.BrokerWithdraw() }
+
+// DarkenImages ensures every per-backend image is built. Idempotent
+// per-backend via imageExists. Release is a no-op — the image cache is
+// host-wide, persisting across projects (and re-builds are cheap if the
+// cache is gone).
+type DarkenImages struct{}
+
+func (DarkenImages) Name() string { return "darken images built" }
+func (DarkenImages) Ensure() error {
+	for _, b := range []string{"claude", "codex", "pi", "gemini"} {
+		if imageExists("local/darkish-" + b + ":latest") {
+			continue
+		}
+		c := exec.Command("make", "-C", "images", b)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		if err := c.Run(); err != nil {
+			return fmt.Errorf("make %s: %w", b, err)
+		}
+	}
+	return nil
+}
+func (DarkenImages) Release() error { return nil }
+
+// HubSecrets stages credentials for each backend into the Hub via the
+// stage-creds.sh substrate script (Phase F replaces the bash with native
+// Go in internal/staging). Release is a no-op — secrets are hub-wide,
+// shared across projects, removed only via --purge.
+type HubSecrets struct{}
+
+func (HubSecrets) Name() string    { return "hub secrets pushed" }
+func (HubSecrets) Ensure() error   { return runSubstrateScript("scripts/stage-creds.sh", []string{"all"}) }
+func (HubSecrets) Release() error  { return nil }
+
+// Substrate stages per-role skill bundles and imports the templates into
+// scion's local store. Combines the two halves of the old
+// ensureAllSkillsStaged: per-role stage-skills.sh runs (which Phase G
+// will replace with native Go) plus the ImportAllTemplates call.
+// Release is a no-op — the Grove resource handles cleanup via scion clean.
+type Substrate struct{}
+
+func (Substrate) Name() string { return "substrate staged + imported" }
+func (Substrate) Ensure() error {
+	templatesDir, modesDir, cleanup, err := resolveSubstrateDirs()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	if err := withSubstrateDirsEnv(templatesDir, modesDir, func() error {
+		dirs, err := os.ReadDir(templatesDir)
+		if err != nil {
+			return fmt.Errorf("read templates dir %s: %w", templatesDir, err)
+		}
+		for _, d := range dirs {
+			if !d.IsDir() || d.Name() == "base" {
+				continue
+			}
+			if err := runSubstrateScript("scripts/stage-skills.sh", []string{d.Name()}); err != nil {
+				fmt.Fprintf(os.Stderr, "substrate: stage-skills %s failed: %v\n", d.Name(), err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return defaultScionClient.ImportAllTemplates(templatesDir)
+}
+func (Substrate) Release() error { return nil }

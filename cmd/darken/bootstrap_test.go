@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-// TestEnsureScionServer_UsesScionClient asserts ensureScionServer routes
+// TestScionServer_EnsureUsesScionClient asserts ScionServer.Ensure routes
 // through ScionClient.ServerStatus so hub-endpoint env propagation applies.
-func TestEnsureScionServer_UsesScionClient(t *testing.T) {
+func TestScionServer_EnsureUsesScionClient(t *testing.T) {
 	mc := &mockScionClient{serverStatusOut: "Status: ok\n"}
 	setDefaultClient(t, mc)
-	if err := ensureScionServer(); err != nil {
-		t.Fatalf("ensureScionServer: %v", err)
+	if err := (ScionServer{}).Ensure(); err != nil {
+		t.Fatalf("ScionServer.Ensure: %v", err)
 	}
 }
 
@@ -45,13 +45,27 @@ func TestBootstrapStepsAreOrdered(t *testing.T) {
 	}
 }
 
-// TestEnsureBrokerProvide_UsesScionClient asserts ensureBrokerProvide routes
+// TestGroveBroker_EnsureUsesBrokerProvide asserts GroveBroker.Ensure routes
 // through ScionClient.BrokerProvide.
-func TestEnsureBrokerProvide_UsesScionClient(t *testing.T) {
+func TestGroveBroker_EnsureUsesBrokerProvide(t *testing.T) {
 	mc := &mockScionClient{}
 	setDefaultClient(t, mc)
-	if err := ensureBrokerProvide(); err != nil {
+	if err := (GroveBroker{}).Ensure(); err != nil {
 		t.Fatalf("expected nil, got: %v", err)
+	}
+}
+
+// TestGroveBroker_ReleaseUsesBrokerWithdraw asserts the symmetric pair —
+// the bug class from #45 (forgotten withdraw) is structurally impossible
+// because Resource requires both methods.
+func TestGroveBroker_ReleaseUsesBrokerWithdraw(t *testing.T) {
+	mc := &mockScionClient{}
+	setDefaultClient(t, mc)
+	if err := (GroveBroker{}).Release(); err != nil {
+		t.Fatalf("expected nil, got: %v", err)
+	}
+	if mc.brokerWithdrawCalls != 1 {
+		t.Fatalf("expected 1 BrokerWithdraw call; got %d", mc.brokerWithdrawCalls)
 	}
 }
 
@@ -233,8 +247,8 @@ func TestEnsureAllSkillsStaged_ImportsTemplatesForLocalStore(t *testing.T) {
 	mc := &mockScionClient{}
 	setDefaultClient(t, mc)
 
-	if err := ensureAllSkillsStaged(); err != nil {
-		t.Fatalf("ensureAllSkillsStaged: %v", err)
+	if err := (Substrate{}).Ensure(); err != nil {
+		t.Fatalf("Substrate.Ensure: %v", err)
 	}
 
 	if got := len(mc.importAllTemplatesCalls); got != 1 {

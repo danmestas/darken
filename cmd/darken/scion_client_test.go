@@ -156,16 +156,6 @@ func TestUploadAllTemplatesToHub_UsesPushTemplate(t *testing.T) {
 	}
 }
 
-// TestEnsureBrokerProvide_UsesBrokerProvide asserts ensureBrokerProvide
-// calls ScionClient.BrokerProvide.
-func TestEnsureBrokerProvide_UsesBrokerProvide(t *testing.T) {
-	mc := &mockScionClient{}
-	setDefaultClient(t, mc)
-	if err := ensureBrokerProvide(); err != nil {
-		t.Fatalf("ensureBrokerProvide: %v", err)
-	}
-}
-
 // TestImportAllTemplates_SuppressesUsageDumpOnKnownError stubs scion to
 // emulate the "no importable agent definitions found" failure (which scion
 // follows with a full cobra Usage block on stderr). The wrapped client must

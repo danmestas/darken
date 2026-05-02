@@ -5,113 +5,24 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/danmestas/darken/internal/substrate"
 )
 
+// runBootstrap delegates to the lifecycle walker (see resources.go) and
+// then runs finalDoctor as a post-ensure sanity check. Each Resource in
+// `lifecycle` reports its own progress prefix; the trailing "bootstrap:
+// OK" line preserves the pre-refactor operator UX.
 func runBootstrap(args []string) error {
-	steps := []struct {
-		name string
-		fn   func() error
-	}{
-		{"docker daemon reachable", checkDocker},
-		{"scion CLI present", checkScion},
-		{"scion server running", ensureScionServer},
-		{"grove registered with broker", ensureBrokerProvide},
-		{"darken images built", ensureImages},
-		{"hub secrets pushed", ensureHubSecrets},
-		{"per-harness skills staged", ensureAllSkillsStaged},
-		{"final doctor", finalDoctor},
+	if err := ensureAll(lifecycle); err != nil {
+		return err
 	}
-	for i, s := range steps {
-		fmt.Printf("[%d/%d] %s ...\n", i+1, len(steps), s.name)
-		if err := s.fn(); err != nil {
-			return fmt.Errorf("step %q failed: %w", s.name, err)
-		}
+	if err := finalDoctor(); err != nil {
+		return err
 	}
 	fmt.Println("bootstrap: OK")
-	return nil
-}
-
-// ensureScionServer starts the scion server if not already running.
-func ensureScionServer() error {
-	if _, err := defaultScionClient.ServerStatus(); err == nil {
-		return nil
-	}
-	// Server not running: start it. Server start is a bootstrap-only
-	// imperative not exposed on ScionClient (callers need check-only or
-	// ensure-running; expose the latter here via a direct exec).
-	cmd := scionCmdWithEnv([]string{"server", "start"})
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-// ensureBrokerProvide registers the current grove with the local broker so
-// agents can be dispatched here. Idempotent — scion broker provide is a
-// no-op when the grove is already registered.
-func ensureBrokerProvide() error {
-	return defaultScionClient.BrokerProvide()
-}
-
-// ensureImages builds any missing darken images via `make -C images <backend>`.
-func ensureImages() error {
-	for _, b := range []string{"claude", "codex", "pi", "gemini"} {
-		if imageExists("local/darkish-" + b + ":latest") {
-			continue
-		}
-		c := exec.Command("make", "-C", "images", b)
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-		if err := c.Run(); err != nil {
-			return fmt.Errorf("make %s: %w", b, err)
-		}
-	}
-	return nil
-}
-
-func ensureHubSecrets() error {
-	return runSubstrateScript("scripts/stage-creds.sh", []string{"all"})
-}
-
-// ensureAllSkillsStaged runs stage-skills.sh per harness directory.
-// Soft-fails per-harness so one missing skill canon doesn't abort
-// the whole bootstrap.
-func ensureAllSkillsStaged() error {
-	templatesDir, modesDir, cleanup, err := resolveSubstrateDirs()
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
-	if err := withSubstrateDirsEnv(templatesDir, modesDir, func() error {
-		dirs, err := os.ReadDir(templatesDir)
-		if err != nil {
-			return fmt.Errorf("read templates dir %s: %w", templatesDir, err)
-		}
-		for _, d := range dirs {
-			if !d.IsDir() || d.Name() == "base" {
-				continue
-			}
-			if err := runSubstrateScript("scripts/stage-skills.sh", []string{d.Name()}); err != nil {
-				fmt.Fprintf(os.Stderr, "bootstrap: stage-skills %s failed: %v\n", d.Name(), err)
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	// Register every canonical role with scion's local template store so
-	// uploadAllTemplatesToHub can push them. The deferred cleanup above
-	// removes the source dir; scion's import copies bodies into its own
-	// store, so post-cleanup push works.
-	if err := defaultScionClient.ImportAllTemplates(templatesDir); err != nil {
-		return fmt.Errorf("import templates: %w", err)
-	}
 	return nil
 }
 
