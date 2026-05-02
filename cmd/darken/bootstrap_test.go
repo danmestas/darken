@@ -34,10 +34,10 @@ func TestBootstrapStepsAreOrdered(t *testing.T) {
 	_ = runBootstrap([]string{})
 
 	body, _ := os.ReadFile(log)
-	// stage-creds.sh was replaced by native Go in Phase F, so the bash
-	// log no longer includes it. The remaining items still validate
-	// scion/make/stage-skills ordering.
-	want := []string{"server", "make", "stage-skills.sh"}
+	// stage-creds.sh and stage-skills.sh were replaced by native Go in
+	// Phase F and Phase G. The bash log now only validates scion/make
+	// ordering — substrate staging happens entirely in-process.
+	want := []string{"server", "make"}
 	pos := -1
 	for _, w := range want {
 		i := strings.Index(string(body), w)

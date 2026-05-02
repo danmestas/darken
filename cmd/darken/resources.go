@@ -186,28 +186,23 @@ type Substrate struct{}
 
 func (Substrate) Name() string { return "substrate staged + imported" }
 func (Substrate) Ensure() error {
-	templatesDir, modesDir, cleanup, err := resolveSubstrateDirs()
+	templatesDir, _, cleanup, err := resolveSubstrateDirs()
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	if err := withSubstrateDirsEnv(templatesDir, modesDir, func() error {
-		dirs, err := os.ReadDir(templatesDir)
-		if err != nil {
-			return fmt.Errorf("read templates dir %s: %w", templatesDir, err)
+	dirs, err := os.ReadDir(templatesDir)
+	if err != nil {
+		return fmt.Errorf("read templates dir %s: %w", templatesDir, err)
+	}
+	for _, d := range dirs {
+		if !d.IsDir() || d.Name() == "base" {
+			continue
 		}
-		for _, d := range dirs {
-			if !d.IsDir() || d.Name() == "base" {
-				continue
-			}
-			if err := runSubstrateScript("scripts/stage-skills.sh", []string{d.Name()}); err != nil {
-				fmt.Fprintf(os.Stderr, "substrate: stage-skills %s failed: %v\n", d.Name(), err)
-			}
+		if err := stageSkillsNative(d.Name()); err != nil {
+			fmt.Fprintf(os.Stderr, "substrate: stage-skills %s failed: %v\n", d.Name(), err)
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
 	return defaultScionClient.ImportAllTemplates(templatesDir)
 }
