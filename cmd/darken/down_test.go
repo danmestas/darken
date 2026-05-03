@@ -34,21 +34,26 @@ func TestGrove_ReleaseRoutesThroughCleanGrove(t *testing.T) {
 	}
 }
 
-// TestGrove_ReleaseNoOpWithoutGroveID confirms the resource is a clean
-// no-op (no client call, no error) when .scion/grove-id is absent — i.e.
-// the workspace was never bootstrapped, so there's nothing to clean.
-func TestGrove_ReleaseNoOpWithoutGroveID(t *testing.T) {
+// TestGrove_Release_CleansHubEvenWhenLocalStateMissing is the regression
+// test for the bug where Grove.Release silently no-oped when .scion/grove-id
+// was absent, leaving the hub grove registration stranded. CleanGrove must
+// be called unconditionally so scion clean --yes can decide idempotency.
+func TestGrove_Release_CleansHubEvenWhenLocalStateMissing(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", root)
+	// Intentionally do NOT create .scion/grove-id.
 
 	mc := &mockScionClient{}
 	setDefaultClient(t, mc)
 
 	if err := (Grove{}).Release(); err != nil {
-		t.Fatalf("Grove.Release should no-op without grove-id, got: %v", err)
+		t.Fatalf("Grove.Release: %v", err)
 	}
-	if len(mc.cleanGroveCalls) != 0 {
-		t.Fatalf("CleanGrove should not be called when grove-id missing; got: %v", mc.cleanGroveCalls)
+	if len(mc.cleanGroveCalls) == 0 {
+		t.Fatal("CleanGrove must be called even when .scion/grove-id is absent; got 0 calls")
+	}
+	if mc.cleanGroveCalls[0] != root {
+		t.Errorf("CleanGrove called with %q; want %q", mc.cleanGroveCalls[0], root)
 	}
 }
 
