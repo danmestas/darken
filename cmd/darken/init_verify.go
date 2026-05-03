@@ -54,6 +54,12 @@ func runInitDoctor(target string) (string, error) {
 			check:    gitignoreHasDarkenEntries,
 			failHint: "run `darken init --refresh` to append entries",
 		},
+		{
+			name:     ".scion/audit.jsonl present",
+			path:     ".scion/audit.jsonl",
+			check:    fileExists,
+			failHint: "run `darken init --refresh` to create the audit log file",
+		},
 	}
 
 	var sb strings.Builder
@@ -74,6 +80,15 @@ func runInitDoctor(target string) (string, error) {
 			len(failed), strings.Join(failed, ", "))
 	}
 	return sb.String(), nil
+}
+
+// fileExists asserts the path exists (any size, including empty).
+// Used for files like .scion/audit.jsonl that are legitimately empty.
+func fileExists(absPath string) error {
+	if _, err := os.Stat(absPath); err != nil {
+		return fmt.Errorf("missing or inaccessible: %s", absPath)
+	}
+	return nil
 }
 
 // fileNonEmpty asserts the path exists and is non-zero size.

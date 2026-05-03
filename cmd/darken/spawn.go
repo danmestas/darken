@@ -10,6 +10,33 @@ import (
 )
 
 func runSpawn(args []string) error {
+	// Handle --help / -h before any other parsing so subcommand-specific
+	// docs are printed rather than falling through to top-level help.
+	// Must be checked before the positional-name extraction below.
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			// Build flagset solely to render PrintDefaults.
+			fs := flag.NewFlagSet("spawn", flag.ContinueOnError)
+			fs.String("type", "", "harness role (e.g. researcher)")
+			fs.String("backend", "", "backend override (claude|codex|pi|gemini)")
+			fs.String("mode", "", "skill-set mode override (defaults to role's default_mode)")
+			fs.Bool("no-stage", false, "skip stage-creds and stage-skills")
+			fs.Bool("watch", false, "block + attach to the agent's session (legacy behavior)")
+			fmt.Fprintln(os.Stderr, "Usage: darken spawn <name> --type <role> [flags] [task...]")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Stage credentials and skills, then start a scion harness agent.")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Flags:")
+			fs.PrintDefaults()
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Examples:")
+			fmt.Fprintln(os.Stderr, "  darken spawn researcher-1 --type researcher \"analyze the API surface\"")
+			fmt.Fprintln(os.Stderr, "  darken spawn impl-2 --type implementer --backend codex \"refactor auth module\"")
+			fmt.Fprintln(os.Stderr, "  darken spawn rev-3 --type reviewer --no-stage \"review PR #42\"")
+			return nil
+		}
+	}
+
 	if len(args) < 1 {
 		return errors.New("usage: darken spawn <name> --type <role> [...]")
 	}

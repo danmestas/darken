@@ -21,7 +21,26 @@ func runInit(args []string) error {
 	dryRun := flags.Bool("dry-run", false, "print actions without executing")
 	force := flags.Bool("force", false, "overwrite existing CLAUDE.md")
 	refresh := flags.Bool("refresh", false, "re-scaffold skills/statusLine/.gitignore without clobbering CLAUDE.md (use --force with --refresh to also regenerate CLAUDE.md)")
+	flags.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: darken init [flags] [target-dir]")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Scaffold CLAUDE.md, .claude/ skills, settings, .gitignore entries, and .scion/audit.jsonl")
+		fmt.Fprintln(os.Stderr, "into the target directory (default: current directory).")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Flags:")
+		flags.PrintDefaults()
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Examples:")
+		fmt.Fprintln(os.Stderr, "  darken init                  # scaffold current directory")
+		fmt.Fprintln(os.Stderr, "  darken init ~/projects/myapp # scaffold a specific target")
+		fmt.Fprintln(os.Stderr, "  darken init --force          # overwrite existing CLAUDE.md")
+		fmt.Fprintln(os.Stderr, "  darken init --refresh        # re-extract skills without touching CLAUDE.md")
+		fmt.Fprintln(os.Stderr, "  darken init --dry-run        # preview what would be written")
+	}
 	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
@@ -96,13 +115,6 @@ func runInit(args []string) error {
 		fmt.Fprintf(os.Stderr, "init: manifest write failed: %v\n", err)
 	}
 
-	// bones init (unchanged)
-	if err := runBonesInit(target); err != nil {
-		fmt.Fprintf(os.Stderr, "init: bones init failed: %v\n", err)
-	} else if _, err := exec.LookPath("bones"); err == nil {
-		fmt.Println("ran `bones init` for workspace bootstrap")
-	}
-
 	return nil
 }
 
@@ -151,6 +163,23 @@ func writeArtifact(target string, art artifact, writeCLAUDE, refresh bool) error
 			return err
 		}
 		fmt.Printf("scaffolded %s\n", art.RelPath)
+		return nil
+
+	case "touch":
+		// Create an empty file if it doesn't already exist. Idempotent:
+		// never truncates a non-empty file (audit log that already has entries).
+		if _, exists := statResult(dst); exists {
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		f, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return nil // another process beat us; treat as idempotent
+		}
+		f.Close()
+		fmt.Printf("created %s\n", art.RelPath)
 		return nil
 
 	case "gitignore-lines":

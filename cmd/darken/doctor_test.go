@@ -174,9 +174,10 @@ func TestInitDoctor_PassesOnCompleteInit(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DARKEN_REPO_ROOT", tmp)
 
-	// Plant a complete init scaffold (matches what Phase 5's runInit produces).
+	// Plant a complete init scaffold (matches what runInit produces).
 	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode"), 0o755)
 	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "subagent-to-subharness"), 0o755)
+	os.MkdirAll(filepath.Join(tmp, ".scion"), 0o755)
 	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("# darken orchestrator-mode\n"), 0o644)
 	os.WriteFile(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode", "SKILL.md"),
 		[]byte("---\nname: orchestrator-mode\n---\n# body\n"), 0o644)
@@ -186,6 +187,7 @@ func TestInitDoctor_PassesOnCompleteInit(t *testing.T) {
 		[]byte(`{"statusLine":{"command":"darken status","type":"command"}}`), 0o644)
 	os.WriteFile(filepath.Join(tmp, ".gitignore"),
 		[]byte(".scion/agents/\n.scion/skills-staging/\n.scion/audit.jsonl\n.claude/worktrees/\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".scion", "audit.jsonl"), []byte(""), 0o644)
 
 	report, err := runInitDoctor(tmp)
 	if err != nil {
