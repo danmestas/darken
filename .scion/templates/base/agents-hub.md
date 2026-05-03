@@ -1,6 +1,6 @@
 # Scion Hub Messaging Protocol
 
-This file defines how Darkish Factory sub-harnesses interact with the Scion hub. Role-specific files do not override these rules.
+This file defines how darken sub-harnesses interact with the Scion hub. Role-specific files do not override these rules.
 
 ---
 

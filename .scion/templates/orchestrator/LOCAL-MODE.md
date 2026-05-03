@@ -1,6 +1,6 @@
 # Local Orchestrator Mode
 
-To run the Darkish Factory orchestrator from a local Claude Code session (observable mode), add the following to your project's CLAUDE.md or paste it as instructions.
+To run the darken orchestrator from a local Claude Code session (observable mode), add the following to your project's CLAUDE.md or paste it as instructions.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ To run the Darkish Factory orchestrator from a local Claude Code session (observ
 
 ## Instructions for Claude Code
 
-When the user asks you to run the Darkish Factory pipeline on a task:
+When the user asks you to run the darken pipeline on a task:
 
 ### 1. Enable the hub
 
