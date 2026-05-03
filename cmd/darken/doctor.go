@@ -183,6 +183,16 @@ func doctorBroadChecks() []DoctorCheck {
 			Detail:      bonesVersion,
 			Remediation: "brew install bones (or run `darken up --no-bones` to skip the bones chain)",
 		},
+		{
+			ID:       "scion-secret-type-enum",
+			Label:    "scion hub secret set --type enum accepts 'environment'",
+			Severity: SeverityFail,
+			Run:      checkScionSecretTypeSupport,
+			// Root cause: darken previously passed --type env; scion's enum is
+			// environment | variable | file. Any mismatch here breaks every spawn
+			// at the stage-creds step. See issue #57.
+			Remediation: "upgrade scion (brew upgrade scion or make install in ~/projects/scion)",
+		},
 	}
 }
 
@@ -390,6 +400,36 @@ func checkHubSecrets() error {
 		if !strings.Contains(out, want) {
 			return fmt.Errorf("missing hub secret: %s", want)
 		}
+	}
+	return nil
+}
+
+// checkScionSecretTypeSupport probes whether scion's `hub secret set`
+// accepts --type environment (the value darken passes for env secrets).
+//
+// Background: darken previously passed --type env, which scion's current
+// enum rejects (accepted: environment | variable | file). That mismatch
+// caused every spawn to fail at stage-creds with exit 1 while doctor
+// reported all-green. This check surfaces the drift before any spawn is
+// attempted.
+//
+// The probe invokes `scion hub secret set --help` and confirms that
+// "environment" appears in the flag description. This is a read-only, no-op
+// call — it never writes a secret — so it is safe to run at doctor time.
+func checkScionSecretTypeSupport() error {
+	out, err := exec.Command("scion", "hub", "secret", "set", "--help").CombinedOutput()
+	if err != nil {
+		// If scion itself is absent, the scion-cli check already caught it.
+		// Return nil here to avoid double-reporting; the scion-cli FAIL is
+		// the actionable one.
+		return nil
+	}
+	if !strings.Contains(string(out), "environment") {
+		return fmt.Errorf(
+			"scion hub secret set --help does not list 'environment' as an accepted --type value; " +
+				"darken passes --type environment for env secrets. " +
+				"This version of scion may use a different enum — upgrade scion or check `scion hub secret set --help` manually",
+		)
 	}
 	return nil
 }

@@ -311,6 +311,37 @@ func TestExecScionClient_ImportAllTemplates_IncludesNonInteractiveFlag(t *testin
 	}
 }
 
+// TestPushEnvSecret_UsesEnvironmentType is the regression test for the
+// stage-creds enum mismatch (issue #57). scion's --type enum is
+// "environment | variable | file"; the old alias "env" is rejected with
+// exit 1. This test pins the argument list that execScionClient.PushEnvSecret
+// passes to scion so that a future enum change is caught here rather than
+// silently breaking every spawn.
+func TestPushEnvSecret_UsesEnvironmentType(t *testing.T) {
+	stubDir := t.TempDir()
+	argsFile := filepath.Join(stubDir, "args.log")
+	stub := "#!/bin/sh\necho \"$@\" >> " + argsFile + "\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	c := &execScionClient{}
+	if err := c.PushEnvSecret("OPENROUTER_API_KEY", "test-value"); err != nil {
+		t.Fatalf("PushEnvSecret: %v", err)
+	}
+	body, _ := os.ReadFile(argsFile)
+	args := string(body)
+	// Must pass --type environment (the only valid scion enum value for env secrets).
+	if !strings.Contains(args, "--type environment") {
+		t.Errorf("PushEnvSecret must pass --type environment; got args: %s", args)
+	}
+	// Must NOT pass the stale alias --type env (causes exit 1 on current scion).
+	if strings.Contains(args, "--type env\n") || strings.Contains(args, "--type env ") {
+		t.Errorf("PushEnvSecret must not pass stale --type env; got args: %s", args)
+	}
+}
+
 // TestSpawn_UsesScionClientStartAgent verifies that runSpawn calls
 // ScionClient.StartAgent instead of the raw scion binary for the start operation.
 func TestSpawn_UsesScionClientStartAgent(t *testing.T) {

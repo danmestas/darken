@@ -91,10 +91,13 @@ type ScionClient interface {
 	//   scion hub secret set --type file --target <target> <name> @<srcPath>
 	PushFileSecret(name, target, srcPath string) error
 
-	// PushEnvSecret uploads a value as an env-type secret named for
+	// PushEnvSecret uploads a value as an environment-type secret named for
 	// the env var it'll populate inside the container. Maps to:
-	//   scion hub secret set --type env --target <name> <name> @<tmpfile>
+	//   scion hub secret set --type environment --target <name> <name> @<tmpfile>
 	// where tmpfile holds value.
+	//
+	// NOTE: scion's accepted enum is "environment | variable | file". The value
+	// "env" was the old (now-rejected) alias. Always use "environment" here.
 	PushEnvSecret(name, value string) error
 }
 
@@ -251,9 +254,12 @@ func (c *execScionClient) PushEnvSecret(name, value string) error {
 		return fmt.Errorf("write temp for env secret: %w", err)
 	}
 	tmp.Close()
+	// scion's accepted --type enum is: environment | variable | file.
+	// The old alias "env" is no longer accepted and causes an enum-mismatch
+	// exit 1 at stage-creds time, breaking every spawn. Use "environment".
 	cmd := scionCmdWithEnv([]string{
 		"hub", "secret", "set",
-		"--type", "env",
+		"--type", "environment",
 		"--target", name,
 		name, "@" + tmp.Name(),
 	})
