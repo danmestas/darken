@@ -46,6 +46,11 @@ case "$1" in
       echo "codex_auth"
       echo "gemini_auth"
     fi
+    # Support "--help" for "hub secret set" (needed by checkScionSecretTypeSupport).
+    # Args: $1=hub $2=secret $3=set $4=--help
+    if [ "$2" = "secret" ] && [ "$3" = "set" ] && [ "$4" = "--help" ]; then
+      echo "--type string   Secret type: environment (default), variable, file"
+    fi
     ;;
   templates)
     sub="$2"

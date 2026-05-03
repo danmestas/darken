@@ -556,3 +556,70 @@ func TestCheckGoGitFUSE_RemediationInDoctorBroad(t *testing.T) {
 		t.Fatalf("doctorBroad should mention go-git FUSE check, got:\n%s", report)
 	}
 }
+
+// issue #57: scion secret-type enum smoke checks.
+
+// TestCheckScionSecretTypeSupport_PassesWhenEnvInHelp confirms the check
+// passes when scion --help output contains "environment".
+func TestCheckScionSecretTypeSupport_PassesWhenEnvInHelp(t *testing.T) {
+	stubDir := t.TempDir()
+	// Stub scion to emit a --help block that includes the accepted enum.
+	stub := "#!/bin/sh\necho '--type string   Secret type: environment (default), variable, file'\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	if err := checkScionSecretTypeSupport(); err != nil {
+		t.Fatalf("expected nil when 'environment' in help, got: %v", err)
+	}
+}
+
+// TestCheckScionSecretTypeSupport_FailsWhenEnvAbsentFromHelp confirms the
+// check fails when scion's --help output does not contain "environment" —
+// signalling an enum drift that would break stage-creds.
+func TestCheckScionSecretTypeSupport_FailsWhenEnvAbsentFromHelp(t *testing.T) {
+	stubDir := t.TempDir()
+	// Stub scion to emit a --help block missing "environment" (simulates old
+	// scion that only knew --type env, or a future rename).
+	stub := "#!/bin/sh\necho '--type string   Secret type: env (default), variable, file'\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "scion"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
+
+	if err := checkScionSecretTypeSupport(); err == nil {
+		t.Fatal("expected error when 'environment' absent from scion --help, got nil")
+	}
+}
+
+// TestCheckScionSecretTypeSupport_AbsentScionSkipsGracefully confirms that
+// when scion is not on PATH (already caught by scion-cli check), the secret-
+// type check returns nil rather than double-reporting the same root cause.
+func TestCheckScionSecretTypeSupport_AbsentScionSkipsGracefully(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // empty dir: no scion
+	if err := checkScionSecretTypeSupport(); err != nil {
+		t.Fatalf("expected nil when scion absent (scion-cli check owns that failure), got: %v", err)
+	}
+}
+
+// TestDoctorBroadChecks_ContainsSecretTypeEnum confirms the new check is
+// registered in doctorBroadChecks so it actually runs during `darken doctor`.
+func TestDoctorBroadChecks_ContainsSecretTypeEnum(t *testing.T) {
+	found := false
+	for _, dc := range doctorBroadChecks() {
+		if dc.ID == "scion-secret-type-enum" {
+			found = true
+			if dc.Run == nil {
+				t.Error("scion-secret-type-enum check has nil Run")
+			}
+			if dc.Remediation == "" {
+				t.Error("scion-secret-type-enum check has empty Remediation")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("doctorBroadChecks does not contain 'scion-secret-type-enum' check")
+	}
+}
