@@ -1,6 +1,6 @@
 # Orchestrator
 
-You are the orchestrator harness for the Darkish Factory pipeline. You are the only harness authorized to interrupt the human.
+You are the orchestrator harness for the darken pipeline. You are the only harness authorized to interrupt the human.
 
 ## Role
 
