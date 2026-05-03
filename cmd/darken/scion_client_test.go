@@ -25,6 +25,9 @@ type mockScionClient struct {
 	importAllTemplatesErr   error
 	importAllTemplatesCalls []string
 
+	groveListJSONOut string
+	groveListJSONErr error
+
 	startAgentCalls     [][]string
 	pushTemplateCalls   []string
 	groveInitCalls      int
@@ -41,13 +44,13 @@ type mockScionClient struct {
 	pushFileSecretCalls [][3]string // {name, target, srcPath}
 	pushEnvSecretCalls  [][2]string // {name, value}
 
-	startServerErr     error
-	stopServerErr      error
-	stopAgentErr       error
-	deleteAgentErr     error
-	deleteTemplateErr  error
-	pushFileSecretErr  error
-	pushEnvSecretErr   error
+	startServerErr    error
+	stopServerErr     error
+	stopAgentErr      error
+	deleteAgentErr    error
+	deleteTemplateErr error
+	pushFileSecretErr error
+	pushEnvSecretErr  error
 }
 
 func (m *mockScionClient) ServerStatus() (string, error) {
@@ -83,6 +86,9 @@ func (m *mockScionClient) CleanGrove(targetDir string) error {
 func (m *mockScionClient) BrokerWithdraw() error {
 	m.brokerWithdrawCalls++
 	return m.brokerWithdrawErr
+}
+func (m *mockScionClient) GroveListJSON() (string, error) {
+	return m.groveListJSONOut, m.groveListJSONErr
 }
 func (m *mockScionClient) LookAgent(name string, extraArgs []string) ([]byte, error) {
 	m.lookAgentCalls = append(m.lookAgentCalls, name)

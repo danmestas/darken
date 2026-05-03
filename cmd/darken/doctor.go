@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -171,6 +172,13 @@ func doctorBroadChecks() []DoctorCheck {
 			Severity:    SeverityFail,
 			Run:         checkGoGitFUSE,
 			Remediation: "clone the grove outside the Docker Desktop shared volume",
+		},
+		{
+			ID:          "grove-status",
+			Label:       "grove status ok (not orphaned)",
+			Severity:    SeverityFail,
+			Run:         checkGroveStatus,
+			Remediation: "re-run `darken up` to re-register the grove with the local broker",
 		},
 		{
 			ID:          "hub-secrets",
@@ -414,6 +422,63 @@ func checkHostsDockerInternalFile(path string) error {
 		"host.docker.internal not found in %s; add with: echo \"127.0.0.1 host.docker.internal\" | sudo tee -a %s",
 		path, path,
 	)
+}
+
+// groveEntry is the shape of one entry from `scion grove list --format json`.
+type groveEntry struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// checkGroveStatus verifies that the current project's grove is reported as
+// "ok" by scion grove list. This catches a known scion issue where
+// `scion grove init` with hub disabled creates a local-only grove that
+// scion's orphan classifier cannot verify, labelling it "orphaned" even when
+// the workspace is healthy.
+//
+// The check is a no-op (returns nil) when:
+//   - cwd is not inside a git repo (not an error — operator is not in a project)
+//   - the project has no .scion/grove-id (grove has never been init'd)
+//   - scion grove list fails (scion not running — a different check covers that)
+func checkGroveStatus() error {
+	root, err := repoRoot()
+	if err != nil {
+		return nil // not in a git repo — skip
+	}
+	// Only run when the grove has been initialized.
+	if _, err := os.Stat(filepath.Join(root, ".scion", "grove-id")); err != nil {
+		return nil // grove not init'd — skip
+	}
+	slug := filepath.Base(root)
+
+	out, err := defaultScionClient.GroveListJSON()
+	if err != nil {
+		return nil // scion not reachable — covered by scion-server checks
+	}
+
+	var entries []groveEntry
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		return nil // can't parse JSON — skip rather than false-alarm
+	}
+
+	for _, e := range entries {
+		if e.Name != slug {
+			continue
+		}
+		if e.Status != "ok" {
+			return fmt.Errorf(
+				"grove %q reports status=%q (want ok) — "+
+					"scion's orphan classifier did not receive the workspace path; "+
+					"this is a known scion issue where grove init with hub disabled "+
+					"leaves local_path unset in grove_contributors; "+
+					"re-run `darken up` or file an issue against scion if it persists",
+				slug, e.Status,
+			)
+		}
+		return nil
+	}
+	// Grove slug not found in list — either not registered or list is incomplete.
+	return nil
 }
 
 func checkHubSecrets() error {

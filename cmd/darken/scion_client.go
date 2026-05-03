@@ -59,6 +59,10 @@ type ScionClient interface {
 	// no-ops since teardown shouldn't abort on already-clean state.
 	BrokerWithdraw() error
 
+	// GroveListJSON returns the raw JSON output of `scion grove list --format json`.
+	// Used by the post-up grove status check to detect misclassified orphans.
+	GroveListJSON() (string, error)
+
 	// LookAgent returns the raw terminal output of `scion look <name>`.
 	// ANSI stripping is the caller's responsibility.
 	LookAgent(name string, extraArgs []string) ([]byte, error)
@@ -151,10 +155,18 @@ func (c *execScionClient) ImportAllTemplates(dir string) error {
 }
 
 func (c *execScionClient) GroveInit(targetDir string) error {
-	cmd := scionCmdWithEnv([]string{"grove", "init"})
+	cmd := scionCmdWithEnv([]string{"grove", "init", "--non-interactive"})
 	cmd.Dir = targetDir
 	err, _ := runScionCmd(cmd)
 	return err
+}
+
+func (c *execScionClient) GroveListJSON() (string, error) {
+	out, err := scionCmdWithEnv([]string{"grove", "list", "--format", "json"}).CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("scion grove list: %w", err)
+	}
+	return string(out), nil
 }
 
 func (c *execScionClient) CleanGrove(targetDir string) error {
