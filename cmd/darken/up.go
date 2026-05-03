@@ -15,6 +15,15 @@ import (
 )
 
 func runUp(args []string) error {
+	// Handle --help / -h before any other parsing so it prints
+	// subcommand-specific docs rather than falling through to top-level help.
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			printUpUsage()
+			return nil
+		}
+	}
+
 	// Strip --no-bones from the args without interfering with the
 	// init-side flag parsing. Anything else passes through verbatim
 	// to runInit / resolveInitTarget so --force, --dry-run, --refresh,
@@ -48,6 +57,24 @@ func runUp(args []string) error {
 		return nil
 	}
 	return chainBonesUp()
+}
+
+func printUpUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: darken up [flags] [target-dir]")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Bring up a project: scaffold init artifacts, run machine prereq bootstrap,")
+	fmt.Fprintln(os.Stderr, "upload harness templates to the hub, then chain to `bones up`.")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Flags:")
+	fmt.Fprintln(os.Stderr, "  --no-bones     skip the `bones up` chain")
+	fmt.Fprintln(os.Stderr, "  --force        overwrite existing CLAUDE.md (passed to darken init)")
+	fmt.Fprintln(os.Stderr, "  --refresh      re-scaffold skills without touching CLAUDE.md")
+	fmt.Fprintln(os.Stderr, "  --dry-run      preview what would be written (passed to darken init)")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Examples:")
+	fmt.Fprintln(os.Stderr, "  darken up                # bring up current directory")
+	fmt.Fprintln(os.Stderr, "  darken up --no-bones     # skip bones chain")
+	fmt.Fprintln(os.Stderr, "  darken up --force        # force-overwrite CLAUDE.md")
 }
 
 // runSetup is the deprecated alias for `darken up`. Prints a

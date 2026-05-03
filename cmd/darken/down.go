@@ -12,7 +12,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,8 +22,24 @@ func runDown(args []string) error {
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	noBones := fs.Bool("no-bones", false, "skip the bones down chain")
 	purge := fs.Bool("purge", false, "also stop the scion server and remove user-scope hub templates (host-wide; use with care)")
-	fs.SetOutput(io.Discard)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: darken down [flags]")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Tear down the project: stop agents, drop the grove, remove init scaffolds,")
+		fmt.Fprintln(os.Stderr, "then chain to `bones down`.")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Examples:")
+		fmt.Fprintln(os.Stderr, "  darken down          # interactive teardown with confirmation")
+		fmt.Fprintln(os.Stderr, "  darken down --yes    # non-interactive teardown")
+		fmt.Fprintln(os.Stderr, "  darken down --purge  # also stop scion server and remove hub templates")
+	}
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 

@@ -35,6 +35,15 @@ type DoctorCheck struct {
 }
 
 func runDoctor(args []string) error {
+	// Handle --help / -h before any other parsing so it prints
+	// subcommand-specific docs rather than falling through to top-level help.
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			printDoctorUsage()
+			return nil
+		}
+	}
+
 	// New: --init triggers per-init scaffold verification (Phase 6).
 	for _, a := range args {
 		if a == "--init" {
@@ -57,6 +66,22 @@ func runDoctor(args []string) error {
 	report, err := doctorBroad()
 	fmt.Println(report)
 	return err
+}
+
+func printDoctorUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: darken doctor [flags] [harness-name]")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Run preflight and post-mortem health checks.")
+	fmt.Fprintln(os.Stderr, "With no arguments: broad system checks (docker, scion, hub secrets, images, etc.).")
+	fmt.Fprintln(os.Stderr, "With a harness-name: per-harness checks for that agent.")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Flags:")
+	fmt.Fprintln(os.Stderr, "  --init    verify per-project init scaffolds (CLAUDE.md, skills, audit log, etc.)")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Examples:")
+	fmt.Fprintln(os.Stderr, "  darken doctor              # broad system check")
+	fmt.Fprintln(os.Stderr, "  darken doctor --init       # verify init scaffolds in current repo")
+	fmt.Fprintln(os.Stderr, "  darken doctor researcher-1 # harness-specific check")
 }
 
 // checkSubstrateDrift compares the project's orchestrator-mode SKILL.md

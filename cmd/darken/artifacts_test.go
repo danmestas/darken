@@ -14,8 +14,8 @@ func TestInitArtifacts_ListIsCompleteAndStable(t *testing.T) {
 	target := t.TempDir()
 	arts := initArtifacts(target)
 
-	if len(arts) != 5 {
-		t.Fatalf("expected 5 artifacts, got %d", len(arts))
+	if len(arts) != 6 {
+		t.Fatalf("expected 6 artifacts, got %d", len(arts))
 	}
 
 	wantPaths := map[string]string{
@@ -24,6 +24,7 @@ func TestInitArtifacts_ListIsCompleteAndStable(t *testing.T) {
 		".claude/skills/subagent-to-subharness/SKILL.md": "file",
 		".claude/settings.local.json":                    "file",
 		".gitignore":                                     "gitignore-lines",
+		".scion/audit.jsonl":                             "touch",
 	}
 	for _, art := range arts {
 		wantKind, ok := wantPaths[art.RelPath]

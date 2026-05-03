@@ -7,6 +7,150 @@ import (
 	"testing"
 )
 
+// TestInitPreservesDarkenNarrativeWhenBonesOnPATH confirms option 1 of the
+// bones-clobber fix: runInit no longer chains bones init, so CLAUDE.md retains
+// the darken-aware narrative even when bones is on PATH.
+func TestInitPreservesDarkenNarrativeWhenBonesOnPATH(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	// Stub bones so verifyInitPrereqs passes, but have bones write a file
+	// to prove it was NOT called (if init still chains it, the file appears).
+	stubDir := t.TempDir()
+	bonesWasCalledFile := filepath.Join(tmp, ".bones-init-called")
+	for _, b := range []string{"scion", "docker"} {
+		os.WriteFile(filepath.Join(stubDir, b), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	}
+	bonesScript := "#!/bin/sh\nif [ \"$1\" = \"init\" ]; then touch " + bonesWasCalledFile + "; fi\nexit 0\n"
+	os.WriteFile(filepath.Join(stubDir, "bones"), []byte(bonesScript), 0o755)
+	t.Setenv("PATH", stubDir)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+
+	// bones init must NOT have been called.
+	if _, err := os.Stat(bonesWasCalledFile); err == nil {
+		t.Fatal("runInit should not chain `bones init` (option 1 of bones-clobber fix)")
+	}
+
+	// CLAUDE.md must contain darken-aware narrative.
+	body, err := os.ReadFile(filepath.Join(tmp, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("CLAUDE.md missing: %v", err)
+	}
+	for _, want := range []string{"darken", "scion", "orchestrator-mode"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("CLAUDE.md missing %q (darken narrative was clobbered): %s", want, body)
+		}
+	}
+}
+
+// TestInitCreatesAuditLog confirms .scion/audit.jsonl is created as an empty
+// file by runInit.
+func TestInitCreatesAuditLog(t *testing.T) {
+	stubPrereqs(t)
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+
+	auditPath := filepath.Join(tmp, ".scion", "audit.jsonl")
+	info, err := os.Stat(auditPath)
+	if err != nil {
+		t.Fatalf(".scion/audit.jsonl not created by init: %v", err)
+	}
+	// File must exist; it may be empty (that's correct for a fresh audit log).
+	if info.IsDir() {
+		t.Fatal(".scion/audit.jsonl must be a file, not a directory")
+	}
+}
+
+// TestInitAuditLogIdempotent confirms that a second init run does not truncate
+// an audit.jsonl that already has entries.
+func TestInitAuditLogIdempotent(t *testing.T) {
+	stubPrereqs(t)
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate audit entries written after the first init.
+	auditPath := filepath.Join(tmp, ".scion", "audit.jsonl")
+	entry := `{"event":"test"}` + "\n"
+	if err := os.WriteFile(auditPath, []byte(entry), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second init must not clobber.
+	if err := runInit([]string{tmp}); err != nil {
+		t.Fatalf("second init: %v", err)
+	}
+	body, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatalf("audit log missing after second init: %v", err)
+	}
+	if string(body) != entry {
+		t.Fatalf("second init truncated audit log: want %q, got %q", entry, body)
+	}
+}
+
+// TestInitHelpPrintsSubcommandDocs confirms that `darken init --help` returns
+// nil (not flag.ErrHelp) and prints init-specific synopsis.
+func TestInitHelpPrintsSubcommandDocs(t *testing.T) {
+	out, err := captureStderr(func() error {
+		return runInit([]string{"--help"})
+	})
+	if err != nil {
+		t.Fatalf("--help should return nil, got: %v", err)
+	}
+	for _, want := range []string{"darken init", "--dry-run", "--force", "--refresh", "Example"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("--help output missing %q:\n%s", want, out)
+		}
+	}
+	// Must NOT look like top-level usage.
+	if strings.Contains(out, "Subcommands:") {
+		t.Fatalf("--help should not print top-level usage:\n%s", out)
+	}
+}
+
+// TestInitDoctorWarnsMissingAuditLog confirms that `darken doctor --init`
+// fails when .scion/audit.jsonl is absent.
+func TestInitDoctorWarnsMissingAuditLog(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DARKEN_REPO_ROOT", tmp)
+
+	// Plant everything EXCEPT audit.jsonl.
+	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode"), 0o755)
+	os.MkdirAll(filepath.Join(tmp, ".claude", "skills", "subagent-to-subharness"), 0o755)
+	os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("# darken orchestrator-mode\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".claude", "skills", "orchestrator-mode", "SKILL.md"),
+		[]byte("---\nname: orchestrator-mode\n---\n# body\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".claude", "skills", "subagent-to-subharness", "SKILL.md"),
+		[]byte("---\nname: subagent-to-subharness\n---\n# body\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".claude", "settings.local.json"),
+		[]byte(`{"statusLine":{"command":"darken status","type":"command"}}`), 0o644)
+	os.WriteFile(filepath.Join(tmp, ".gitignore"),
+		[]byte(".scion/agents/\n.scion/skills-staging/\n.scion/audit.jsonl\n.claude/worktrees/\n"), 0o644)
+	// NOTE: .scion/audit.jsonl intentionally NOT created.
+
+	report, err := runInitDoctor(tmp)
+	if err == nil {
+		t.Fatalf("expected runInitDoctor to fail when audit.jsonl missing; report:\n%s", report)
+	}
+	if !strings.Contains(report, "audit.jsonl") {
+		t.Fatalf("report should mention audit.jsonl: %s", report)
+	}
+	if !strings.Contains(report, "FAIL") {
+		t.Fatalf("report should show FAIL: %s", report)
+	}
+}
+
 func TestInitScaffoldsCLAUDE(t *testing.T) {
 	stubPrereqs(t)
 	tmp := t.TempDir()

@@ -47,9 +47,13 @@ var subcommands = []subcommand{
 }
 
 func main() {
-	// flag.Parse exits non-zero on --help; intercept first so the test runner sees a clean exit.
-	for _, a := range os.Args[1:] {
-		if a == "-h" || a == "--help" || a == "help" {
+	// Intercept top-level --help / -h / help ONLY when the first argument
+	// is itself a help flag. This lets `darken init --help` reach runInit
+	// (which prints subcommand-specific docs) rather than falling through to
+	// the global usage here.
+	if len(os.Args) > 1 {
+		first := os.Args[1]
+		if first == "-h" || first == "--help" || first == "help" {
 			printUsage()
 			os.Exit(0)
 		}
@@ -63,15 +67,15 @@ func main() {
 		os.Exit(2)
 	}
 
-	args := fs.Args()
-	if len(args) == 0 {
+	subcmdArgs := fs.Args()
+	if len(subcmdArgs) == 0 {
 		printUsage()
 		os.Exit(2)
 	}
 
 	for _, sc := range subcommands {
-		if sc.name == args[0] {
-			if err := sc.run(args[1:]); err != nil {
+		if sc.name == subcmdArgs[0] {
+			if err := sc.run(subcmdArgs[1:]); err != nil {
 				fmt.Fprintln(os.Stderr, "darken:", err)
 				os.Exit(1)
 			}
@@ -79,7 +83,7 @@ func main() {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "darken: unknown subcommand %q\n", args[0])
+	fmt.Fprintf(os.Stderr, "darken: unknown subcommand %q\n", subcmdArgs[0])
 	printUsage()
 	os.Exit(2)
 }

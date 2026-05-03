@@ -81,6 +81,11 @@ func initArtifacts(targetDir string) []artifact {
 			Kind:    "gitignore-lines",
 			Body:    func() ([]byte, error) { return []byte(strings.Join(gitignoreLines, "\n") + "\n"), nil },
 		},
+		{
+			RelPath: ".scion/audit.jsonl",
+			Kind:    "touch",
+			Body:    func() ([]byte, error) { return nil, nil },
+		},
 	}
 }
 
