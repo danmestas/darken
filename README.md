@@ -1,4 +1,4 @@
-# The Darkish Factory
+# darken
 
 By Daniel Mestas
 
@@ -110,7 +110,7 @@ Scion is one harness-of-harnesses; more are coming. Gas Town from Steve Yegge an
 
 Vocabulary is Scion's; other substrates will use their own. **Grove** is the workspace, **Hub** is the control plane, **Harness** is an agent adapter, **Runtime** is the container backend (Docker, Podman, Apple containers, Kubernetes).
 
-Scion provides isolation, harness-agnostic runtime choice, OpenTelemetry across the swarm, and pause-resume-attach for any agent. It does not prescribe orchestration logic. That is what the Darkish Factory adds.
+Scion provides isolation, harness-agnostic runtime choice, OpenTelemetry across the swarm, and pause-resume-attach for any agent. It does not prescribe orchestration logic. That is what darken adds.
 
 Substrate choice is reversible. If Scion regresses or a better descendant appears, the architecture moves.
 
@@ -310,7 +310,7 @@ The mechanism for the binary-as-spec subcase: a dedicated `oracle` harness exerc
 
 For work without a machine-checkable spec, substitute an agent that acts like the human. Replace the operator at the top of the pipeline with a spec-producing upstream system — another agent, a product-spec generator, a requirements pipeline — and the human at the end of the escalation classifier with a *principal* configured with the operator's taste, architectural preferences, ethical bright lines, and reversibility rules. Escalations go to the principal, which answers in the same `ratify | choose | rework | abort` schema. The constitution and the deterministic reversibility gates stay anchored to operator-authored ground truth; the principal applies them but doesn't rewrite them.
 
-**Why start darkish.** The principal is a model calibrated on the operator's judgment, and the calibration data is the audit log the Darkish Factory produces as a byproduct. The fully dark variant is what the Darkish Factory becomes after enough volume accumulates. Don't build it first; let it emerge.
+**Why start darkish.** The principal is a model calibrated on the operator's judgment, and the calibration data is the audit log darken produces as a byproduct. The fully dark variant is what darken becomes after enough volume accumulates. Don't build it first; let it emerge.
 
 ### 11.3 Composition
 
@@ -328,7 +328,7 @@ The architecture composes patterns that have been validated independently.
 
 **Constitutions measurably improve quality.** [Constitutional Spec-Driven Development (arxiv 2602.02584)](https://arxiv.org/abs/2602.02584) reports a banking case study: 73% reduction in security vulnerabilities, 56% faster time to first secure build, 4.3x improvement in compliance documentation coverage. The paper also documents the constitution-as-attack-surface failure mode, which the audit log and deterministic reversibility gates contain.
 
-**Orchestrator + specialized workers + adversarial verifier is the convergent pattern.** [Augment Code's Coordinator/Implementor/Verifier](https://www.augmentcode.com/guides/coordinator-implementor-verifier), Cosine's task-decomposition-with-specialized-agents, and [Anthropic's evaluator-optimizer pattern](https://www.anthropic.com/engineering/building-effective-agents) describe the same structure from different angles. The Darkish Factory's contribution is not the pattern itself but the escalation classifier on top.
+**Orchestrator + specialized workers + adversarial verifier is the convergent pattern.** [Augment Code's Coordinator/Implementor/Verifier](https://www.augmentcode.com/guides/coordinator-implementor-verifier), Cosine's task-decomposition-with-specialized-agents, and [Anthropic's evaluator-optimizer pattern](https://www.anthropic.com/engineering/building-effective-agents) describe the same structure from different angles. darken's contribution is not the pattern itself but the escalation classifier on top.
 
 **Legacy modernization via behavioral characterization is in production.** [Red Hat's "agent mesh"](https://www.redhat.com/en/blog/refactoring-speed-mission-agent-mesh-approach-legacy-system-modernization-red-hat-ai) uses coding agents that "analyze legacy Python 2 or Java source code, identify deprecated APIs, generate refactored equivalents, and produce characterization tests that capture the original behavior before anything changes." That is the §11.1 oracle-harness pattern, already shipping.
 
@@ -346,9 +346,9 @@ The architecture composes patterns that have been validated independently.
 - **Minimum decision volume for harness self-tuning.** Replay-based evaluation needs enough decisions per harness to be statistically meaningful. How many is enough is an open calibration question.
 - **Minimum audit-log volume for a trustworthy principal.** Going dark via §11.2 requires the principal to have seen enough operator judgments to act like the operator. The volume required is unknown.
 
-The Darkish Factory is not the endpoint. It is the scaffolding that produces the data — the audit log, the per-harness metrics, the labeled decisions — from which a fully dark system calibrates itself.
+darken is not the endpoint. It is the scaffolding that produces the data — the audit log, the per-harness metrics, the labeled decisions — from which a fully dark system calibrates itself.
 
-This document is itself a formal specification of the kind §11.1 describes. If the thesis holds, it is buildable from this text alone — a spec, a constitution, and a convergent set of published patterns. Whether a fully-dark pipeline can actually produce the Darkish Factory from its own description is the first natural test.
+This document is itself a formal specification of the kind §11.1 describes. If the thesis holds, it is buildable from this text alone — a spec, a constitution, and a convergent set of published patterns. Whether a fully-dark pipeline can actually produce darken from its own description is the first natural test.
 
 ---
 

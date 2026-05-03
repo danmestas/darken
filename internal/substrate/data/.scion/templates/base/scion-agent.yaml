@@ -1,7 +1,7 @@
 schema_version: "1"
 # The template name is always derived from its containing folder.
 # Role-specific templates inherit from this base by overriding fields.
-description: "Darkish Factory base harness template — role identity is set by the extending template"
+description: "darken base harness template — role identity is set by the extending template"
 agent_instructions: agents.md
 system_prompt: system-prompt.md
 default_harness_config: claude

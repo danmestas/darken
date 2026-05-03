@@ -74,7 +74,7 @@ brews:
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/danmestas/darken"
-    description: "darken — Darkish Factory orchestration substrate CLI"
+    description: "darken — orchestration substrate CLI"
     license: "MIT"
     install: |
       bin.install "darken"

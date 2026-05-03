@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// TestOrchestratorModeSkill_SubharnessDefault asserts the new C4 rule:
+// TestOrchestratorModeSkill_SubharnessDefault asserts the C4 rule:
 // subharness is the DEFAULT dispatch path; Agent is a FALLBACK with
-// four named conditions.
+// four named conditions (kebab-case per the issue #61 rewrite).
 func TestOrchestratorModeSkill_SubharnessDefault(t *testing.T) {
 	body, err := fs.ReadFile(EmbeddedFS(), "data/skills/orchestrator-mode/SKILL.md")
 	if err != nil {
@@ -20,9 +20,9 @@ func TestOrchestratorModeSkill_SubharnessDefault(t *testing.T) {
 	for _, phrase := range []string{
 		"DEFAULT",
 		"FALLBACK",
-		"substrate unavailable",
-		"no role matches",
-		"operator override",
+		"substrate-unavailable",
+		"no-role-matches",
+		"operator-override",
 		"already-spawned",
 	} {
 		if !strings.Contains(s, phrase) {
@@ -43,9 +43,9 @@ func TestSubagentToSubharnessSkill_SubharnessDefault(t *testing.T) {
 	for _, phrase := range []string{
 		"DEFAULT",
 		"FALLBACK",
-		"substrate unavailable",
-		"no role matches",
-		"operator override",
+		"substrate-unavailable",
+		"no-role-matches",
+		"operator-override",
 		"already-spawned",
 	} {
 		if !strings.Contains(s, phrase) {

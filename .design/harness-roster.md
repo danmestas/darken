@@ -1,6 +1,6 @@
 # Harness Roster
 
-Reference table for every harness in the Darkish Factory pipeline. Read alongside README §5.1 (sub-harness descriptions) and §5.7 (harness configuration as code), and `docs/superpowers/specs/2026-04-26-harness-and-image-configuration-design.md` §3.1 (backend matrix). All fields are sourced from `.scion/templates/*/scion-agent.yaml`.
+Reference table for every harness in the darken pipeline. Read alongside README §5.1 (sub-harness descriptions) and §5.7 (harness configuration as code), and `docs/superpowers/specs/2026-04-26-harness-and-image-configuration-design.md` §3.1 (backend matrix). All fields are sourced from `.scion/templates/*/scion-agent.yaml`.
 
 The `designer` entry collapses the `spec-writer` and `architect` roles from README §5.1 — both produced specs with structural decisions; one harness does it more efficiently. The single `planner` from the original README has been split into four tiers (`planner-t1`..`planner-t4`); the routing classifier picks the tier (see `.design/pipeline-mechanics.md` §9 and spec §8). `darwin` is the post-pipeline evolution agent that emits operator-gated YAML recommendations under `.scion/darwin-recommendations/` for `darken apply`.
 

@@ -1,8 +1,11 @@
-# Darkish Factory Images
+# darken — substrate container images
 
 Per-harness-class container images that extend Scion's runtime images with
-the Darkish Factory's tool baseline, folder-trust prelude, and credential
-mounting hooks.
+darken's tool baseline, folder-trust prelude, and credential mounting hooks.
+
+(The image-name prefix `darkish-` is a separate naming axis kept for
+backward compatibility with existing image tags; the substrate project
+itself is **darken**.)
 
 ## Universal baseline
 
