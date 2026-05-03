@@ -34,7 +34,7 @@ func runHistory(args []string) error {
 		return err
 	}
 
-	root, err := repoRoot()
+	root, err := historyRoot()
 	if err != nil {
 		return fmt.Errorf("not in an init'd repo: %w", err)
 	}
@@ -113,6 +113,17 @@ func runHistory(args []string) error {
 	}
 
 	return nil
+}
+
+// historyRoot returns the workspace root for reading the audit log.
+// It checks $DARKEN_WORKSPACE_ROOT before falling back to repoRoot()
+// so that both darken audit append and darken history agree on the
+// canonical log location.
+func historyRoot() (string, error) {
+	if v := os.Getenv("DARKEN_WORKSPACE_ROOT"); v != "" {
+		return v, nil
+	}
+	return repoRoot()
 }
 
 // summarizePayload returns a short string describing the most-relevant
