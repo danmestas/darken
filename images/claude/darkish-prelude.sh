@@ -182,7 +182,7 @@ mkdir -p "${DARKEN_HOOKS_DIR}"
 
 cat > "${DARKEN_HOOK_SCRIPT}" << 'HOOKEOF'
 #!/usr/bin/env bash
-# Darkish Factory subharness: route Stop/AskFollowupQuestion events to operator.
+# darken subharness: route Stop/AskFollowupQuestion events to operator.
 set -uo pipefail
 RECIPIENT="${DARKEN_HOOK_RECIPIENT:-user:Development User}"
 AGENT="${SCION_AGENT_NAME:-unknown}"

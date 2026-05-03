@@ -54,6 +54,5 @@ Use these for surgical operations when full `up` is overkill.
 | Command | Purpose |
 |---|---|
 | `darken create-harness <name>` | Scaffold a new harness directory |
-| `darken orchestrate` | Print host-mode orchestrator skill body (for piping into a fresh Claude Code session) |
 
 `darken doctor` runs preflight + per-harness checks. `darken doctor <role>` shows which substrate layer (override / project / embedded) served that role's manifest.

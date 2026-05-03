@@ -1,6 +1,6 @@
 # Base Worker Protocol
 
-This file defines the shared protocol for all Darkish Factory sub-harnesses. Role-specific ’agents.md’ files extend this protocol; they do not duplicate it.
+This file defines the shared protocol for all darken sub-harnesses. Role-specific ’agents.md’ files extend this protocol; they do not duplicate it.
 
 ---
 

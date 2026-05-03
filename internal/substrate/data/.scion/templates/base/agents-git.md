@@ -1,6 +1,6 @@
 # Git Worktree Protocol
 
-Every Darkish Factory sub-harness owns exactly one git worktree. This file defines the rules. Role-specific behavior does not override these rules.
+Every darken sub-harness owns exactly one git worktree. This file defines the rules. Role-specific behavior does not override these rules.
 
 ---
 

@@ -1,8 +1,10 @@
 # Build script for darkish-* container images.
 #
 # Each darkish-* image extends a corresponding scion-* image, adding the
-# Darkish Factory's tool baseline, folder-trust prelude, and credential
-# mounting hooks.
+# darken tool baseline, folder-trust prelude, and credential
+# mounting hooks. (The "darkish-" image-name prefix is a separate
+# naming axis from the "darken" project name; the prefix groups the
+# substrate's container images and is unrelated to the project codename.)
 #
 # Usage:
 #   make claude           # build local/darkish-claude:latest

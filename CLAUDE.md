@@ -1,12 +1,12 @@
-# Darkish Factory — orchestrator mode by default
+# darken — orchestrator mode by default
 
-You are running inside the Darkish Factory orchestration substrate. By default in this repo, you operate as **the orchestrator** for the §7 pipeline.
+You are running inside the darken orchestration substrate. By default in this repo, you operate as **the orchestrator** for the §7 pipeline.
 
 **On session start (or whenever the operator gives you a task), invoke the `orchestrator-mode` skill before doing anything else.** The skill loads the full §7 loop, role roster, escalation classifier, and host-mode protocol. Do not start researching, planning, or implementing inline — your job is to dispatch subharnesses.
 
 ## Substrate
 
-- **`bin/darken`** (build with `make darken`) — operator CLI. See [docs/CLI.md](docs/CLI.md) for the full surface (~19 commands across Lifecycle / Operations / Inspection / Targeted setup / Authoring). The `darken orchestrate` subcommand prints the orchestrator skill body for piping into a fresh session.
+- **`darken`** (build with `make darken`; the dev-convenience symlink at `bin/darken` is on PATH) — operator CLI. See [docs/CLI.md](docs/CLI.md) for the full surface across Lifecycle / Operations / Inspection / Targeted setup / Authoring.
 - **`.scion/templates/<role>/`** — 13 harness manifests. The `orchestrator` template is for the containerized orchestrator deployment (Mode A); host mode (Mode B, this CLAUDE.md) uses the skill instead.
 - **`.scion/skills-staging/<role>/`** — per-harness skill bundles, mounted read-only into containers.
 - **`scion server` must be running.** `scion list` shows live agents.
@@ -18,7 +18,7 @@ You have two delegation primitives. **In orchestrator mode, default to subharnes
 | When | Use |
 |---|---|
 | Pure-text host work — read code, summarize, search this repo | inline OR `Agent` (Explore subagent) |
-| Anything mutating files, running tests, isolated worktree, different model | `bin/darken spawn <name> --type <role> "<task>"` (subharness) |
+| Anything mutating files, running tests, isolated worktree, different model | `darken spawn <name> --type <role> "<task>"` (subharness) |
 
 Read the `subagent-to-subharness` skill for the decision tree, the role mapping table, and how to read worker output back.
 
@@ -43,8 +43,8 @@ darken down
 darken upgrade-init
 
 # In a Claude Code session here, you (orchestrator) dispatch via:
-bin/darken spawn researcher-1 --type researcher "produce a brief on X"
-bin/darken list             # see live agents
+darken spawn researcher-1 --type researcher "produce a brief on X"
+darken list                  # see live agents
 scion look researcher-1      # read worker output
 ```
 
