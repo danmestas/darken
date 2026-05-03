@@ -43,6 +43,7 @@ var subcommands = []subcommand{
 	{"status", "print one-line status (statusLine-friendly)", runStatus},
 	{"dashboard", "open scion's web UI in the default browser", runDashboard},
 	{"history", "tabular view of .scion/audit.jsonl", runHistory},
+	{"audit", "audit-log helpers (append ...)", runAudit},
 	{"modes", "list available modes or show one (modes list | modes show <name>)", runModes},
 }
 
