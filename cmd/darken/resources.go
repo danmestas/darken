@@ -207,9 +207,9 @@ func (ScionServer) Observe() (string, string) {
 // impossible because both methods are required.
 type GroveBroker struct{}
 
-func (GroveBroker) Name() string    { return "broker provided to grove" }
-func (GroveBroker) Ensure() error   { return defaultScionClient.BrokerProvide() }
-func (GroveBroker) Release() error  { return defaultScionClient.BrokerWithdraw() }
+func (GroveBroker) Name() string   { return "broker provided to grove" }
+func (GroveBroker) Ensure() error  { return defaultScionClient.BrokerProvide() }
+func (GroveBroker) Release() error { return defaultScionClient.BrokerWithdraw() }
 
 // DarkenImages ensures every per-backend image is built. Idempotent
 // per-backend via imageExists. Release is a no-op — the image cache is
@@ -292,9 +292,6 @@ func (Grove) Ensure() error {
 func (Grove) Release() error {
 	root, err := repoRoot()
 	if err != nil {
-		return nil
-	}
-	if _, err := os.Stat(filepath.Join(root, ".scion", "grove-id")); err != nil {
 		return nil
 	}
 	return defaultScionClient.CleanGrove(root)

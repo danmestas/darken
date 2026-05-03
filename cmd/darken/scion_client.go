@@ -157,7 +157,10 @@ func (c *execScionClient) GroveInit(targetDir string) error {
 func (c *execScionClient) CleanGrove(targetDir string) error {
 	cmd := scionCmdWithEnv([]string{"clean", "--yes"})
 	cmd.Dir = targetDir
-	err, _ := runScionCmd(cmd)
+	err, suppressed := runScionCmd(cmd, "no scion grove found")
+	if suppressed {
+		return nil
+	}
 	return err
 }
 
